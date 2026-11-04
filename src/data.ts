@@ -9,7 +9,7 @@ export const WEDDING = {
   dateText: "Selasa, 15 Desember 2026",
   akad: { time: "10.00 – 14.00 WIB", place: "RM Taman Dewi Sri", address: "Jl. Raya Gayaman No.57, Gayaman, Kec. Mojoanyar, Kabupaten Mojokerto, Jawa Timur 61364" },
   resepsi: { time: "10.00 – 14.00 WIB", place: "RM Taman Dewi Sri", address: "Jl. Raya Gayaman No.57, Gayaman, Kec. Mojoanyar, Kabupaten Mojokerto, Jawa Timur 61364" },
-  mapsUrl: "https://maps.google.com/?q=Masjid+Agung+Al-Azhar+Jakarta",
+  mapsUrl: "https://maps.app.goo.gl/VcJQGCzvMmDb989X7",
   gifts: [
     { bank: "BNI", number: "1178647505", name: "Fajar Rachmadi" },
     { bank: "DANA", number: "085156151376", name: "Fajar Rachmadi" },
