@@ -35,10 +35,10 @@ export const defaults = (): WeddingConfig => ({
   gifts: [...DEFAULT_WEDDING.gifts],
   gallery: [...DEFAULT_GALLERY],
   story: [...DEFAULT_STORY],
-  musicUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3",
-  heroPhoto: "https://images.unsplash.com/photo-1519741497674-611481863552?w=1400&q=80",
-  groomPhoto: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&q=80",
-  bridePhoto: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=600&q=80",
+  musicUrl: "https://res.cloudinary.com/pslavszr/video/upload/v1790743147/wedding/rdfqee45l5i8yxlya0si.mp3",
+  heroPhoto: "https://drive.google.com/thumbnail?id=1_1u2ctDUN4jMepfgO7YH-LyzQS-dNmmi&sz=w1000",
+  groomPhoto: "https://lh3.googleusercontent.com/d/1lLPCIlflzPyQW-bhiflelnBAPvuWPqXT",
+  bridePhoto: "https://lh3.googleusercontent.com/d/1yMnlEdW30D8z_M8HzmSi0ul7-RZX3nC_",
 });
 
 export function loadLocal(): WeddingConfig {
