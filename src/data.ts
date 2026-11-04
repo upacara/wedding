@@ -1,5 +1,5 @@
 // ✏️ EDIT THIS FILE to personalize the wedding site
-{
+export const WEDDING = {
   "groom": "Fajar Rachmadi",
   "bride": "Annisa Nur Fadhilah",
   "groomFather": "Bpk. Nur Achmad & Ibu Luh Putu Wardani",
