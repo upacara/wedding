@@ -148,9 +148,28 @@ export default function App() {
               </div>
             ))}
           </div>
-          {cd.done && <p className="mt-4 font-serif2 italic text-lg">Alhamdulillah, acara telah berlangsung. Terima kasih atas doanya.</p>}
-          <a href="https://calendar.google.com/calendar/render?action=TEMPLATE&text=Wedding+Fajar+%26+Aisyah&dates=20261220T010000Z/20261220T070000Z" target="_blank" rel="noreferrer"
-            className="inline-block mt-6 border border-sage-700 text-sage-800 rounded-full px-7 py-2.5 text-sm hover:bg-sage-700 hover:text-cream transition">＋ Simpan Tanggal (Google Calendar)</a>
+         {cd.done && (
+            <p className="mt-4 font-serif2 italic text-lg">
+              Alhamdulillah, acara telah berlangsung. Terima kasih atas doanya.
+            </p>
+          )}
+          <a
+            href={`https://calendar.google.com/calendar/render?${new URLSearchParams({
+              action: "TEMPLATE",
+              text: "Wedding Fajar & Aisyah",
+              dates: "20261215T090000/20261215T140000",
+              ctz: "Asia/Jakarta",
+              location:
+                "RM. Taman Dewi Sri, Jl. Raya Gayaman No.57, Gayaman, Kec. Mojoanyar, Kabupaten Mojokerto, Jawa Timur 61364",
+              details:
+                "Lokasi Google Maps: https://maps.app.goo.gl/GuDpMwZSmiAt2HMd9\nUndangan Digital: https://wedding.fajarrachmadi.my.id",
+            }).toString()}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block mt-6 border border-sage-700 text-sage-800 rounded-full px-7 py-2.5 text-sm hover:bg-sage-700 hover:text-cream transition"
+          >
+            ＋ Simpan Tanggal (Google Calendar)
+          </a>
         </div>
       </section>
 
