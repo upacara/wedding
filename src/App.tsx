@@ -281,7 +281,7 @@ export default function App() {
         </div>
       </section>
 
-      {/* GIFT */}
+    {/* GIFT */}
       <section className="bg-white border-t border-sage-100">
         <div className="max-w-2xl mx-auto px-6 py-16 text-center">
           <h2 className="reveal font-script text-5xl text-sage-800">Tanda Kasih</h2>
@@ -297,6 +297,26 @@ export default function App() {
                 </button>
               </div>
             ))}
+
+            {WEDDING.giftAddress?.address && (() => {
+              const addr = WEDDING.giftAddress;
+              const fullAddress = `${addr.recipient} (${addr.phone})\n${addr.address}`;
+              return (
+                <div className="reveal bg-cream border border-gold/40 rounded-2xl p-6 shadow">
+                  <p className="tracking-[0.25em] text-xs text-gold-dark font-semibold uppercase">Kirim Hadiah Fisik</p>
+                  <p className="font-serif2 text-2xl mt-2 text-sage-800">{addr.recipient}</p>
+                  {addr.phone && <p className="text-sm text-sage-600 mt-0.5 tabular-nums">{addr.phone}</p>}
+                  <p className="text-sm text-sage-700 mt-2 leading-relaxed max-w-md mx-auto">{addr.address}</p>
+                  {addr.note && <p className="text-xs italic text-sage-500 mt-1.5">Catatan: {addr.note}</p>}
+                  <button
+                    onClick={() => copy(fullAddress)}
+                    className="mt-4 border border-sage-700 rounded-full px-6 py-2 text-sm hover:bg-sage-700 hover:text-cream transition"
+                  >
+                    {copied === fullAddress ? "✓ Alamat Tersalin!" : "⧉ Salin Alamat"}
+                  </button>
+                </div>
+              );
+            })()}
           </div>
         </div>
       </section>
