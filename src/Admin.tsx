@@ -1,751 +1,402 @@
-import { useState } from "react";
-import {
-  DEFAULT_PASSWORD,
-  changePassword,
-  guestLink,
-  isAuthed,
-  isSheetsConfigured,
-  loadLocal,
-  login,
-  logout,
-  resetConfig,
-  saveConfig,
-  useGuests,
-  usePhotos,
-} from "./store";
-import type { WeddingConfig } from "./store";
-import { canUpload, uploadAudio, uploadPhoto } from "./uploads";
+import { useEffect, useState } from "react";
+import { WEDDING as DEFAULT_WEDDING, GALLERY as DEFAULT_GALLERY, STORY as DEFAULT_STORY } from "./data";
 
-const input =
-  "w-full border border-sage-200 rounded-xl px-4 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sage-400";
-const label = "text-xs font-semibold tracking-wide text-sage-600 uppercase";
-const btn = "rounded-xl px-4 py-2.5 text-sm font-medium transition";
-const tabCls = (active: boolean) =>
-  `px-4 py-2 rounded-full text-sm whitespace-nowrap transition ${
-    active ? "bg-sage-800 text-cream" : "bg-sage-100 text-sage-700 hover:bg-sage-200"
-  }`;
+export type Gift = { bank: string; number: string; name: string };
+export type GiftAddress = { recipient: string; phone: string; address: string; note?: string };
+export type StoryItem = { year: string; title: string; text: string };
+export type WeddingConfig = typeof DEFAULT_WEDDING & {
+  gifts: Gift[];
+  giftAddress: GiftAddress;
+} & {
+  gallery: string[];
+  story: StoryItem[];
+  musicUrl: string;
+  heroPhoto: string;
+  groomPhoto: string;
+  bridePhoto: string;
+};
 
-const TABS = ["Mempelai", "Acara", "Galeri", "Story", "Tamu", "Foto Tamu", "Gift & Musik", "Backup"] as const;
+export type Wish = { no?: number; name: string; msg: string; attend: string; guests?: string; at: number };
+export type Guest = { no: number; name: string };
 
-// Convert Google Drive share links to direct image URLs.
-// e.g. .../file/d/FILE_ID/view -> https://drive.google.com/thumbnail?id=FILE_ID&sz=w1000
-export function convertDriveUrl(url: string): string {
-  const m = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
-  if (m) return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w1000`;
-  return url;
+const KEY = "wedding-cms-config-v1";
+const WISH_KEY = "wedding-wishes";
+const AUTH_KEY = "wedding-cms-auth";
+export const DEFAULT_PASSWORD = "admin123";
+
+// Backend: Google Apps Script → Sheets (gratis). Kosong = mode lokal saja.
+const API = import.meta.env.VITE_SHEETS_API_URL || "";
+const TOKEN = import.meta.env.VITE_SHEETS_TOKEN || "";
+export const isSheetsConfigured = Boolean(API);
+
+const SEED_WISHES: Wish[] = [
+  { name: "Keluarga Budi", msg: "Barakallahu laka wa baraka alaika wa jamaa bainakuma fii khair. Selamat!", attend: "Hadir", at: 1 },
+  { name: "Sinta & Andi", msg: "Happy wedding! Semoga menjadi keluarga sakinah mawaddah warahmah.", attend: "Hadir", at: 2 },
+];
+
+const DEFAULT_GIFT_ADDRESS: GiftAddress = {
+  recipient: "",
+  phone: "",
+  address: "",
+  note: "",
+};
+
+export const defaults = (): WeddingConfig => ({
+  ...DEFAULT_WEDDING,
+  gifts: [...DEFAULT_WEDDING.gifts],
+  giftAddress: {
+    ...DEFAULT_GIFT_ADDRESS,
+    ...((DEFAULT_WEDDING as Partial<WeddingConfig>).giftAddress || {}),
+  },
+  gallery: [...DEFAULT_GALLERY],
+  story: [...DEFAULT_STORY],
+  musicUrl: "https://res.cloudinary.com/pslavszr/video/upload/v1790743147/wedding/rdfqee45l5i8yxlya0si.mp3",
+  heroPhoto: "https://drive.google.com/thumbnail?id=1_1u2ctDUN4jMepfgO7YH-LyzQS-dNmmi&sz=w1000",
+  groomPhoto: "https://lh3.googleusercontent.com/d/1lLPCIlflzPyQW-bhiflelnBAPvuWPqXT",
+  bridePhoto: "https://lh3.googleusercontent.com/d/1yMnlEdW30D8z_M8HzmSi0ul7-RZX3nC_",
+});
+
+function mergeConfig(raw: Partial<WeddingConfig>): WeddingConfig {
+  const base = defaults();
+  return {
+    ...base,
+    ...raw,
+    giftAddress: {
+      ...base.giftAddress,
+      ...(raw.giftAddress || {}),
+    },
+  };
 }
 
-// Audio needs a download/stream URL, not the image thumbnail URL.
-export function convertDriveAudio(url: string): string {
-  const m = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
-  if (m) return `https://drive.google.com/uc?export=download&id=${m[1]}`;
-  return url;
-}
-
-export default function Admin() {
-  const [authed, setAuthed] = useState(isAuthed());
-  const [pw, setPw] = useState("");
-  const [err, setErr] = useState("");
-  const [cfg, setCfg] = useState<WeddingConfig>(() => loadLocal());
-  const [tab, setTab] = useState<(typeof TABS)[number]>("Mempelai");
-  const [saved, setSaved] = useState(false);
-  const [uploading, setUploading] = useState<string | null>(null);
-  const [deletingPhotoNo, setDeletingPhotoNo] = useState<number | null>(null);
-  const [newPw, setNewPw] = useState("");
-  const [importText, setImportText] = useState("");
-  const [guestName, setGuestName] = useState("");
-  const { guests, busy: guestsBusy, add: addGuest, remove: removeGuest } = useGuests();
-  const { photos, remove: removePhoto } = usePhotos();
-
-  if (!authed) {
-    return (
-      <div className="min-h-screen bg-sage-900 flex items-center justify-center px-6">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (login(pw)) setAuthed(true);
-            else setErr("Password salah. Default: admin123");
-          }}
-          className="bg-cream rounded-3xl p-8 w-full max-w-sm shadow-2xl"
-        >
-          <p className="tracking-[0.3em] text-xs text-sage-500 uppercase text-center">Wedding CMS</p>
-          <h1 className="font-script text-4xl text-center text-sage-800 mt-2">Admin Panel</h1>
-          <input
-            type="password"
-            value={pw}
-            onChange={(e) => setPw(e.target.value)}
-            placeholder="Password"
-            className={`${input} mt-6`}
-            autoFocus
-          />
-          {err && <p className="text-red-600 text-sm mt-2">{err}</p>}
-          <button className="w-full bg-sage-700 text-cream rounded-xl py-3 mt-4 hover:bg-sage-800">Masuk</button>
-          <a href="#/" className="block text-center text-sm text-sage-500 mt-4 hover:underline">
-            ← Kembali ke undangan
-          </a>
-        </form>
-      </div>
-    );
+export function loadLocal(): WeddingConfig {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return defaults();
+    return mergeConfig(JSON.parse(raw));
+  } catch {
+    return defaults();
   }
+}
 
-  const set = <K extends keyof WeddingConfig>(k: K, v: WeddingConfig[K]) =>
-    setCfg((c) => ({ ...c, [k]: v }));
+function post(body: Record<string, unknown>) {
+  return fetch(API, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain" }, // hindari preflight CORS
+    body: JSON.stringify(body),
+  }).then((r) => r.json());
+}
 
-  const save = async () => {
-    setSaved(true);
-    await saveConfig(cfg);
-    setTimeout(() => setSaved(false), 2000);
-  };
-
-  /** Upload file ke Cloudinary, lalu tulis URL-nya via `apply`. */
-  const handleUpload = async (slot: string, file: File, kind: "photo" | "audio", apply: (url: string) => void) => {
-    if (!canUpload) {
-      alert("Isi Cloudinary di .env dulu untuk upload (gratis, tanpa kartu).");
-      return;
-    }
-    setUploading(slot);
+/** Simpan lokal + ke Google Sheets (jika dikonfigurasi). Tamu membaca dari Sheets. */
+export async function saveConfig(cfg: WeddingConfig) {
+  localStorage.setItem(KEY, JSON.stringify(cfg));
+  window.dispatchEvent(new CustomEvent("wedding-config-updated"));
+  if (isSheetsConfigured) {
     try {
-      const url = kind === "photo" ? await uploadPhoto(file) : await uploadAudio(file);
-      apply(url);
+      const res = await post({ action: "saveConfig", token: TOKEN, config: cfg });
+      if (!res.ok) alert("Tersimpan lokal, tapi gagal ke Sheets: " + (res.error || "error"));
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Upload gagal.");
-    } finally {
-      setUploading(null);
+      console.warn(e);
+      alert("Tersimpan lokal, tapi gagal ke Sheets. Cek URL deploy / akses Anyone.");
     }
-  };
+  }
+}
 
-  const pickFile = (accept: string, onFile: (f: File) => void) => {
-    const inp = document.createElement("input");
-    inp.type = "file";
-    inp.accept = accept;
-    inp.onchange = () => {
-      const f = inp.files?.[0];
-      if (f) onFile(f);
+export async function resetConfig() {
+  const d = defaults();
+  localStorage.setItem(KEY, JSON.stringify(d));
+  window.dispatchEvent(new CustomEvent("wedding-config-updated"));
+  if (isSheetsConfigured) {
+    try { await post({ action: "saveConfig", token: TOKEN, config: d }); } catch { /* ignore */ }
+  }
+}
+
+/** Config live: Sheets → fallback localStorage. */
+export function useCmsConfig(): WeddingConfig {
+  const [cfg, setCfg] = useState<WeddingConfig>(loadLocal);
+  useEffect(() => {
+    const reload = () => setCfg(loadLocal());
+    window.addEventListener("wedding-config-updated", reload);
+    window.addEventListener("storage", reload);
+    let stop = false;
+    const timer = setInterval(async () => {
+      if (!isSheetsConfigured || stop) return;
+      try {
+        const r = await fetch(`${API}?action=getConfig`).then((x) => x.json());
+        if (r.config) {
+          const merged = mergeConfig(r.config);
+          setCfg(merged);
+          localStorage.setItem(KEY, JSON.stringify(merged));
+        }
+      } catch { /* offline — pakai lokal */ }
+    }, 30000);
+    // ambil sekali saat load
+    (async () => {
+      if (!isSheetsConfigured) return;
+      try {
+        const r = await fetch(`${API}?action=getConfig`).then((x) => x.json());
+        if (r.config && !stop) {
+          const merged = mergeConfig(r.config);
+          setCfg(merged);
+          localStorage.setItem(KEY, JSON.stringify(merged));
+        }
+      } catch { /* ignore */ }
+    })();
+    return () => {
+      stop = true;
+      clearInterval(timer);
+      window.removeEventListener("wedding-config-updated", reload);
+      window.removeEventListener("storage", reload);
     };
-    inp.click();
-  };
+  }, []);
+  return cfg;
+}
 
-  const exportJSON = () => {
-    const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "wedding-config.json";
-    a.click();
-  };
+// ---------- Wishes / RSVP ----------
 
-  const doImport = () => {
+function loadLocalWishes(): Wish[] {
+  try { return JSON.parse(localStorage.getItem(WISH_KEY) || "[]"); }
+  catch { return []; }
+}
+
+export function useWishes() {
+  const [wishes, setWishes] = useState<Wish[]>(loadLocalWishes);
+  const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    let stop = false;
+    const pull = async () => {
+      if (!isSheetsConfigured || stop) return;
+      try {
+        const r = await fetch(`${API}?action=getWishes`).then((x) => x.json());
+        if (Array.isArray(r.wishes) && !stop) setWishes(r.wishes);
+      } catch { /* ignore */ }
+    };
+    pull();
+    const timer = setInterval(pull, 15000);
+    const local = () => setWishes(loadLocalWishes());
+    window.addEventListener("wedding-wishes-updated", local);
+    return () => {
+      stop = true;
+      clearInterval(timer);
+      window.removeEventListener("wedding-wishes-updated", local);
+    };
+  }, []);
+
+  const send = async (w: Omit<Wish, "at">) => {
+    setSending(true);
     try {
-      const parsed = JSON.parse(importText);
-      setCfg((c) => ({ ...c, ...parsed }));
-      setImportText("");
-      alert("Import berhasil — klik Simpan untuk menerapkan.");
-    } catch {
-      alert("JSON tidak valid.");
+      if (isSheetsConfigured) {
+        const res = await post({ action: "addWish", wish: { ...w, at: Date.now() } });
+        if (!res.ok) throw new Error(res.error || "gagal");
+      } else {
+        const next = [{ ...w, at: Date.now() }, ...loadLocalWishes()].slice(0, 100);
+        localStorage.setItem(WISH_KEY, JSON.stringify(next));
+        window.dispatchEvent(new CustomEvent("wedding-wishes-updated"));
+      }
+      return true;
+    } catch (e) {
+      console.warn(e);
+      alert("Gagal mengirim. Cek koneksi / URL Sheets.");
+      return false;
+    } finally {
+      setSending(false);
     }
   };
 
-  return (
-    <div className="min-h-screen bg-cream">
-      <header className="bg-sage-800 text-cream sticky top-0 z-10 shadow">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-          <div>
-            <p className="text-[11px] tracking-[0.3em] uppercase text-cream/60">Wedding CMS</p>
-            <h1 className="font-serif2 text-xl font-semibold">Edit Undangan Pernikahan</h1>
-          </div>
-          <div className="flex gap-2">
-            <a href="#/" className={`${btn} bg-white/10 hover:bg-white/20 text-sm`}>
-              👁 Preview
-            </a>
-            <button
-              onClick={() => {
-                logout();
-                setAuthed(false);
-              }}
-              className={`${btn} bg-white/10 hover:bg-white/20 text-sm`}
-            >
-              Keluar
-            </button>
-            <button onClick={save} className={`${btn} bg-gold text-sage-900 hover:bg-gold-light text-sm font-semibold`}>
-              {saved ? "✓ Tersimpan!" : "💾 Simpan"}
-            </button>
-          </div>
-        </div>
-        <div className="max-w-5xl mx-auto px-4 pb-3 flex gap-2 overflow-x-auto">
-          {TABS.map((t) => (
-            <button key={t} onClick={() => setTab(t)} className={tabCls(tab === t)}>
-              {t}
-            </button>
-          ))}
-        </div>
-      </header>
+  return { wishes: wishes.length ? wishes : SEED_WISHES, sending, send };
+}
 
-      <main className="max-w-5xl mx-auto px-4 py-8">
-        {tab === "Mempelai" && (
-          <div className="space-y-4">
-            <div className="grid md:grid-cols-2 gap-4">
-              {[
-                ["groom", "Nama Mempelai Pria"],
-                ["bride", "Nama Mempelai Wanita"],
-                ["groomFather", "Orang tua pria"],
-                ["brideFather", "Orang tua wanita"],
-              ].map(([k, l]) => (
-                <div key={k}>
-                  <p className={label}>{l}</p>
-                  <input
-                    value={String(cfg[k as keyof WeddingConfig] ?? "")}
-                    onChange={(e) => set(k as keyof WeddingConfig, e.target.value as never)}
-                    className={`${input} mt-1`}
-                  />
-                </div>
-              ))}
-            </div>
-            <div className="grid md:grid-cols-3 gap-4">
-              {[
-                ["heroPhoto", "Foto Hero / Sampul"],
-                ["groomPhoto", "Foto Mempelai Pria"],
-                ["bridePhoto", "Foto Mempelai Wanita"],
-              ].map(([k, l]) => (
-                <div key={k} className="bg-white rounded-2xl border border-sage-100 p-4">
-                  <p className={label}>{l}</p>
-                  <img
-                    src={String(cfg[k as keyof WeddingConfig] ?? "")}
-                    alt={l}
-                    className="w-full h-40 object-cover rounded-xl mt-2 bg-sage-50"
-                    loading="lazy"
-                  />
-                  <input
-                    value={String(cfg[k as keyof WeddingConfig] ?? "")}
-                    placeholder="https://... atau link Google Drive"
-                    onChange={(e) => set(k as keyof WeddingConfig, convertDriveUrl(e.target.value.trim()) as never)}
-                    className={`${input} mt-2`}
-                  />
-                  <button
-                    onClick={() =>
-                      pickFile("image/*", (f) =>
-                        handleUpload(k, f, "photo", (url) => set(k as keyof WeddingConfig, url as never))
-                      )
-                    }
-                    disabled={uploading === k}
-                    className={`${btn} w-full mt-2 ${
-                      canUpload ? "bg-sage-700 text-cream hover:bg-sage-800" : "bg-sage-100 text-sage-400"
-                    } disabled:opacity-60`}
-                  >
-                    {uploading === k ? "Mengupload..." : "⬆ Upload foto"}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+// ---------- Guest list ----------
 
-        {tab === "Acara" && (
-          <div className="grid md:grid-cols-2 gap-4">
-            <div>
-              <p className={label}>Tanggal (ISO)</p>
-              <input
-                value={cfg.dateISO}
-                onChange={(e) => set("dateISO", e.target.value)}
-                className={`${input} mt-1`}
-                placeholder="2026-12-15T08:00:00+07:00"
-              />
-            </div>
-            <div>
-              <p className={label}>Tanggal tampil</p>
-              <input value={cfg.dateText} onChange={(e) => set("dateText", e.target.value)} className={`${input} mt-1`} />
-            </div>
-            {(["akad", "resepsi"] as const).map((ev) => (
-              <div key={ev} className="bg-white rounded-2xl border border-sage-100 p-5 space-y-3">
-                <h3 className="font-serif2 text-lg font-semibold capitalize">{ev}</h3>
-                {(["time", "place", "address"] as const).map((f) => (
-                  <div key={f}>
-                    <p className={label}>{f}</p>
-                    <input
-                      value={cfg[ev][f]}
-                      onChange={(e) => set(ev, { ...cfg[ev], [f]: e.target.value })}
-                      className={`${input} mt-1`}
-                    />
-                  </div>
-                ))}
-              </div>
-            ))}
-            <div className="md:col-span-2">
-              <p className={label}>Google Maps URL</p>
-              <input value={cfg.mapsUrl} onChange={(e) => set("mapsUrl", e.target.value)} className={`${input} mt-1`} />
-            </div>
-          </div>
-        )}
+/** Link undangan personal: cover otomatis menampilkan nama tamu. */
+export function guestLink(name: string) {
+  return `${window.location.origin}${window.location.pathname}?to=${encodeURIComponent(name)}`;
+}
 
-        {tab === "Galeri" && (
-          <div className="space-y-3">
-            {cfg.gallery.map((url, i) => (
-              <div key={i} className="flex gap-2 items-center bg-white rounded-2xl border p-3">
-                <img src={url} alt="" className="w-16 h-16 object-cover rounded-xl" loading="lazy" />
-                <input
-                  value={url}
-                  placeholder="https://... atau link Google Drive"
-                  onChange={(e) => {
-                    const g = [...cfg.gallery];
-                    g[i] = convertDriveUrl(e.target.value.trim());
-                    set("gallery", g);
-                  }}
-                  className={input}
-                />
-                <button
-                  onClick={() => set("gallery", cfg.gallery.filter((_, j) => j !== i))}
-                  className={`${btn} bg-red-50 text-red-600 hover:bg-red-100`}
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-            <div className="flex gap-2">
-              <button
-                onClick={() =>
-                  set("gallery", [
-                    ...cfg.gallery,
-                    "https://images.unsplash.com/photo-1519741497674-611481863552?w=800&q=80",
-                  ])
-                }
-                className={`${btn} bg-sage-100 text-sage-800 hover:bg-sage-200`}
-              >
-                ＋ Tambah via URL
-              </button>
-              <button
-                onClick={() =>
-                  pickFile("image/*", (f) =>
-                    handleUpload("gallery-new", f, "photo", (url) => set("gallery", [...cfg.gallery, url]))
-                  )
-                }
-                disabled={uploading === "gallery-new"}
-                className={`${btn} ${
-                  canUpload ? "bg-sage-700 text-cream hover:bg-sage-800" : "bg-sage-100 text-sage-400"
-                } disabled:opacity-60`}
-              >
-                {uploading === "gallery-new" ? "Mengupload..." : "⬆ Upload foto"}
-              </button>
-            </div>
-            {!canUpload && (
-              <p className="text-xs text-amber-700">
-                Upload butuh Cloudinary di .env (gratis). Sementara pakai URL / Google Drive.
-              </p>
-            )}
-          </div>
-        )}
+export function useGuests() {
+  const [guests, setGuests] = useState<Guest[]>([]);
+  const [busy, setBusy] = useState(false);
 
-        {tab === "Story" && (
-          <div className="space-y-3">
-            {cfg.story.map((s, i) => (
-              <div key={i} className="bg-white rounded-2xl border p-4 space-y-2">
-                <div className="grid grid-cols-3 gap-2">
-                  <input
-                    value={s.year}
-                    placeholder="Tahun"
-                    onChange={(e) => {
-                      const st = [...cfg.story];
-                      st[i] = { ...s, year: e.target.value };
-                      set("story", st);
-                    }}
-                    className={input}
-                  />
-                  <input
-                    value={s.title}
-                    placeholder="Judul"
-                    onChange={(e) => {
-                      const st = [...cfg.story];
-                      st[i] = { ...s, title: e.target.value };
-                      set("story", st);
-                    }}
-                    className={`${input} col-span-2`}
-                  />
-                </div>
-                <textarea
-                  value={s.text}
-                  rows={2}
-                  onChange={(e) => {
-                    const st = [...cfg.story];
-                    st[i] = { ...s, text: e.target.value };
-                    set("story", st);
-                  }}
-                  className={input}
-                />
-                <button
-                  onClick={() => set("story", cfg.story.filter((_, j) => j !== i))}
-                  className="text-sm text-red-600 hover:underline"
-                >
-                  Hapus
-                </button>
-              </div>
-            ))}
-            <button
-              onClick={() => set("story", [...cfg.story, { year: "2026", title: "Judul baru", text: "Cerita..." }])}
-              className={`${btn} bg-sage-100 text-sage-800 hover:bg-sage-200`}
-            >
-              ＋ Tambah story
-            </button>
-          </div>
-        )}
+  useEffect(() => {
+    let stop = false;
+    const pull = async () => {
+      if (!isSheetsConfigured || stop) return;
+      try {
+        const r = await fetch(`${API}?action=getGuests`).then((x) => x.json());
+        if (Array.isArray(r.guests) && !stop) setGuests(r.guests);
+      } catch { /* ignore */ }
+    };
+    pull();
+    const timer = setInterval(pull, 15000);
+    return () => { stop = true; clearInterval(timer); };
+  }, []);
 
-        {tab === "Tamu" && (
-          <div className="space-y-4 max-w-3xl">
-            {!isSheetsConfigured ? (
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-sm text-amber-900">
-                Daftar tamu butuh backend Sheets. Isi <code>VITE_SHEETS_API_URL</code> + <code>VITE_SHEETS_TOKEN</code>{" "}
-                di .env, lalu deploy ulang Apps Script sebagai <b>New version</b>.
-              </div>
-            ) : (
-              <>
-                <form
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    if (await addGuest(guestName)) setGuestName("");
-                  }}
-                  className="flex gap-2"
-                >
-                  <input
-                    value={guestName}
-                    onChange={(e) => setGuestName(e.target.value)}
-                    placeholder="Nama tamu, misal: Keluarga Budi"
-                    className={input}
-                  />
-                  <button
-                    disabled={guestsBusy}
-                    className={`${btn} bg-sage-700 text-cream hover:bg-sage-800 whitespace-nowrap disabled:opacity-60`}
-                  >
-                    ＋ Tambah
-                  </button>
-                </form>
-                <p className="text-xs text-sage-500">
-                  Setiap tamu mendapat <b>link personal</b> — cover undangan otomatis menampilkan namanya (bukan lagi
-                  "Bapak/Ibu/Saudara/i"). Bagikan via WhatsApp.
-                </p>
-                <div className="bg-white rounded-2xl border overflow-hidden">
-                  <div className="grid grid-cols-[3rem_1fr_auto] gap-2 px-4 py-2 bg-sage-50 text-xs font-semibold text-sage-600 uppercase">
-                    <span>No</span>
-                    <span>Guest Name</span>
-                    <span>Aksi</span>
-                  </div>
-                  {guests.map((g) => (
-                    <div key={g.no} className="grid grid-cols-[3rem_1fr_auto] gap-2 px-4 py-3 border-t items-center">
-                      <span className="tabular-nums text-sage-500">{g.no}</span>
-                      <span className="font-medium truncate">{g.name}</span>
-                      <span className="flex gap-1.5">
-                        <button
-                          onClick={() => {
-                            navigator.clipboard?.writeText(guestLink(g.name));
-                            alert("Link tersalin:\n" + guestLink(g.name));
-                          }}
-                          className="text-xs bg-sage-100 hover:bg-sage-200 rounded-lg px-3 py-1.5"
-                        >
-                          ⧉ Link
-                        </button>
-                        <a
-                          href={`https://wa.me/?text=${encodeURIComponent(
-                            "Assalamu'alaikum, mohon doa restu 🙏\n" + guestLink(g.name)
-                          )}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-xs bg-green-100 text-green-800 hover:bg-green-200 rounded-lg px-3 py-1.5"
-                        >
-                          WA
-                        </a>
-                        <button
-                          onClick={() => {
-                            if (confirm(`Hapus ${g.name}?`)) removeGuest(g.no);
-                          }}
-                          className="text-xs bg-red-50 text-red-600 hover:bg-red-100 rounded-lg px-3 py-1.5"
-                        >
-                          ✕
-                        </button>
-                      </span>
-                    </div>
-                  ))}
-                  {!guests.length && (
-                    <p className="px-4 py-6 text-sm text-sage-400 text-center">Belum ada tamu. Tambahkan di atas.</p>
-                  )}
-                </div>
-                <p className="text-xs text-sage-500">
-                  Total: {guests.length} tamu • tersimpan di tab "Guests" pada spreadsheet.
-                </p>
-              </>
-            )}
-          </div>
-        )}
+  const add = async (name: string) => {
+    const n = name.trim().slice(0, 100);
+    if (!n) return false;
+    setBusy(true);
+    try {
+      const res = await post({ action: "addGuest", token: TOKEN, guest: { name: n } });
+      if (!res.ok) throw new Error(res.error || "gagal");
+      setGuests((g) => [...g, { no: res.no ?? Date.now(), name: n }]);
+      return true;
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Gagal menambah tamu.");
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
 
-        {tab === "Foto Tamu" && (
-          <div className="space-y-4">
-            {!isSheetsConfigured ? (
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-sm text-amber-900">
-                Moderasi foto tamu membutuhkan backend Google Sheets + Drive. Pastikan <code>VITE_SHEETS_API_URL</code>{" "}
-                dan <code>VITE_SHEETS_TOKEN</code> sudah terisi di <code>.env</code>.
-              </div>
-            ) : (
-              <div className="bg-white rounded-2xl border border-sage-100 p-5 space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className={label}>Moderasi Foto Momen Tamu ({photos.length} foto)</p>
-                    <p className="text-xs text-sage-500 mt-1">
-                      Menghapus foto akan menghapus baris di tab <b>Photos</b> Google Sheets sekaligus memindahkan file
-                      aslinya di Google Drive ke <b>Trash</b>.
-                    </p>
-                  </div>
-                </div>
+  const remove = async (no: number) => {
+    setBusy(true);
+    try {
+      const res = await post({ action: "deleteGuest", token: TOKEN, no });
+      if (!res.ok) throw new Error(res.error || "gagal");
+      setGuests((g) => g.filter((x) => x.no !== no));
+      return true;
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Gagal menghapus tamu.");
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
 
-                {photos.length > 0 ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                    {photos.map((p, idx) => {
-                      const isDeleting = p.no !== undefined && deletingPhotoNo === p.no;
-                      return (
-                        <div
-                          key={p.no ?? idx}
-                          className="border border-sage-200 rounded-2xl overflow-hidden bg-sage-50 flex flex-col"
-                        >
-                          <a href={p.url} target="_blank" rel="noopener noreferrer" className="block overflow-hidden">
-                            <img
-                              src={p.url}
-                              alt={p.caption || p.name}
-                              loading="lazy"
-                              className="w-full aspect-square object-cover hover:scale-105 transition duration-200"
-                            />
-                          </a>
-                          <div className="p-3 flex-1 flex flex-col justify-between gap-2">
-                            <div>
-                              <p className="text-xs font-semibold text-sage-800 truncate">{p.name}</p>
-                              {p.caption && (
-                                <p className="text-[11px] text-sage-600 line-clamp-2 mt-0.5">{p.caption}</p>
-                              )}
-                              {p.at > 0 && (
-                                <p className="text-[10px] text-sage-400 mt-1">
-                                  {new Date(p.at).toLocaleString("id-ID", {
-                                    day: "2-digit",
-                                    month: "short",
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  })}
-                                </p>
-                              )}
-                            </div>
-                            <button
-                              type="button"
-                              disabled={isDeleting || p.no === undefined}
-                              onClick={async () => {
-                                if (p.no === undefined) return;
-                                if (!confirm(`Hapus foto dari "${p.name}"? File di Google Drive juga akan masuk Trash.`)) {
-                                  return;
-                                }
-                                setDeletingPhotoNo(p.no);
-                                try {
-                                  await removePhoto(p.no);
-                                } finally {
-                                  setDeletingPhotoNo(null);
-                                }
-                              }}
-                              className="w-full text-xs font-medium bg-red-50 text-red-600 hover:bg-red-100 rounded-xl py-2 transition disabled:opacity-50"
-                            >
-                              {isDeleting ? "Menghapus..." : "🗑 Hapus Foto"}
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-sm text-sage-400 text-center py-10">
-                    Belum ada foto momen yang diunggah oleh tamu.
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+  return { guests, busy, add, remove };
+}
 
-        {tab === "Gift & Musik" && (
-          <div className="space-y-4">
-            {cfg.gifts.map((g, i) => (
-              <div key={i} className="bg-white rounded-2xl border p-4 grid md:grid-cols-3 gap-2">
-                <input
-                  value={g.bank}
-                  placeholder="Bank"
-                  onChange={(e) => {
-                    const gs = [...cfg.gifts];
-                    gs[i] = { ...g, bank: e.target.value };
-                    set("gifts", gs);
-                  }}
-                  className={input}
-                />
-                <input
-                  value={g.number}
-                  placeholder="Nomor"
-                  onChange={(e) => {
-                    const gs = [...cfg.gifts];
-                    gs[i] = { ...g, number: e.target.value };
-                    set("gifts", gs);
-                  }}
-                  className={input}
-                />
-                <div className="flex gap-2">
-                  <input
-                    value={g.name}
-                    placeholder="a.n."
-                    onChange={(e) => {
-                      const gs = [...cfg.gifts];
-                      gs[i] = { ...g, name: e.target.value };
-                      set("gifts", gs);
-                    }}
-                    className={input}
-                  />
-                  <button
-                    onClick={() => set("gifts", cfg.gifts.filter((_, j) => j !== i))}
-                    className={`${btn} bg-red-50 text-red-600`}
-                  >
-                    ✕
-                  </button>
-                </div>
-              </div>
-            ))}
-            <button
-              onClick={() => set("gifts", [...cfg.gifts, { bank: "BCA", number: "", name: "" }])}
-              className={`${btn} bg-sage-100 text-sage-800 hover:bg-sage-200`}
-            >
-              ＋ Tambah rekening
-            </button>
+// --- password gate admin (client-side) ---
+export function isAuthed() {
+  return sessionStorage.getItem(AUTH_KEY) === "1";
+}
+export function login(password: string): boolean {
+  const saved = localStorage.getItem("wedding-cms-password") || DEFAULT_PASSWORD;
+  if (password === saved) {
+    sessionStorage.setItem(AUTH_KEY, "1");
+    return true;
+  }
+  return false;
+}
+export function logout() {
+  sessionStorage.removeItem(AUTH_KEY);
+}
+export function changePassword(next: string) {
+  localStorage.setItem("wedding-cms-password", next);
+}
 
-            <div className="bg-white rounded-2xl border p-4 space-y-3">
-              <p className={label}>Alamat Pengiriman Hadiah Fisik (kosongkan alamat jika ingin disembunyikan)</p>
-              <div className="grid md:grid-cols-2 gap-2">
-                <input
-                  value={cfg.giftAddress?.recipient || ""}
-                  placeholder="Nama Penerima"
-                  onChange={(e) => set("giftAddress", { ...cfg.giftAddress, recipient: e.target.value })}
-                  className={input}
-                />
-                <input
-                  value={cfg.giftAddress?.phone || ""}
-                  placeholder="No. HP / WhatsApp Penerima"
-                  onChange={(e) => set("giftAddress", { ...cfg.giftAddress, phone: e.target.value })}
-                  className={input}
-                />
-              </div>
-              <textarea
-                rows={3}
-                value={cfg.giftAddress?.address || ""}
-                placeholder="Alamat lengkap pengiriman kado (Jalan, RT/RW, Kel/Desa, Kec, Kota/Kab, Kode Pos)"
-                onChange={(e) => set("giftAddress", { ...cfg.giftAddress, address: e.target.value })}
-                className={input}
-              />
-              <input
-                value={cfg.giftAddress?.note || ""}
-                placeholder="Catatan / Patokan lokasi (opsional)"
-                onChange={(e) => set("giftAddress", { ...cfg.giftAddress, note: e.target.value })}
-                className={input}
-              />
-            </div>
-            <div>
-              <p className={label}>URL Musik latar</p>
-              <input
-                value={cfg.musicUrl}
-                placeholder="https://... atau link Google Drive"
-                onChange={(e) => set("musicUrl", convertDriveAudio(e.target.value.trim()))}
-                className={`${input} mt-1`}
-              />
-              <div className="flex gap-2 mt-2 items-center">
-                <button
-                  onClick={() => pickFile("audio/*", (f) => handleUpload("music", f, "audio", (url) => set("musicUrl", url)))}
-                  disabled={uploading === "music"}
-                  className={`${btn} ${
-                    canUpload ? "bg-sage-700 text-cream hover:bg-sage-800" : "bg-sage-100 text-sage-400"
-                  } disabled:opacity-60`}
-                >
-                  {uploading === "music" ? "Mengupload..." : "⬆ Upload MP3 (maks 15MB)"}
-                </button>
-                {cfg.musicUrl && <audio src={cfg.musicUrl} controls className="h-9" />}
-              </div>
-            </div>
-          </div>
-        )}
+// ---------- Live Guest Photos (Google Drive via Apps Script) ----------
 
-        {tab === "Backup" && (
-          <div className="space-y-4 max-w-2xl">
-            <div className="bg-white rounded-2xl border p-5">
-              <h3 className="font-semibold">Export / Import</h3>
-              <div className="flex gap-2 mt-3 flex-wrap">
-                <button onClick={exportJSON} className={`${btn} bg-sage-700 text-cream hover:bg-sage-800`}>
-                  ⬇ Download JSON
-                </button>
-                <button
-                  onClick={() => {
-                    navigator.clipboard?.writeText(JSON.stringify(cfg, null, 2));
-                    alert("Disalin!");
-                  }}
-                  className={`${btn} bg-sage-100 hover:bg-sage-200`}
-                >
-                  ⧉ Salin JSON
-                </button>
-                <button
-                  onClick={async () => {
-                    if (confirm("Reset ke bawaan (data.ts)?")) {
-                      await resetConfig();
-                      setCfg(loadLocal());
-                    }
-                  }}
-                  className={`${btn} bg-red-50 text-red-600 hover:bg-red-100`}
-                >
-                  ↺ Reset bawaan
-                </button>
-              </div>
-              <p className={label + " mt-5"}>Import JSON</p>
-              <textarea
-                value={importText}
-                onChange={(e) => setImportText(e.target.value)}
-                rows={5}
-                placeholder='Paste {"groom": ...} di sini'
-                className={`${input} mt-1 font-mono`}
-              />
-              <button onClick={doImport} className={`${btn} bg-sage-700 text-cream mt-2`}>
-                Import
-              </button>
-            </div>
-            <div className="bg-white rounded-2xl border p-5">
-              <h3 className="font-semibold">Ganti password admin</h3>
-              <p className="text-xs text-sage-500">Default: {DEFAULT_PASSWORD}</p>
-              <div className="flex gap-2 mt-2">
-                <input
-                  type="password"
-                  value={newPw}
-                  onChange={(e) => setNewPw(e.target.value)}
-                  placeholder="Password baru"
-                  className={input}
-                />
-                <button
-                  onClick={() => {
-                    if (newPw.length >= 4) {
-                      changePassword(newPw);
-                      setNewPw("");
-                      alert("Password diganti.");
-                    }
-                  }}
-                  className={`${btn} bg-sage-700 text-cream`}
-                >
-                  Ganti
-                </button>
-              </div>
-            </div>
-            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-sm text-amber-900">
-              <b>Catatan:</b> jika <code>VITE_SHEETS_API_URL</code> terisi, tombol Simpan otomatis menulis ke Google
-              Sheets sehingga semua tamu melihat perubahan. Tanpa itu, data hanya tersimpan di browser ini — gunakan
-              Download JSON lalu paste ke <code>src/data.ts</code>.
-            </div>
-          </div>
-        )}
+export type GuestPhoto = {
+  no?: number;
+  name: string;
+  caption?: string;
+  url: string;
+  at: number;
+};
 
-        <div className="sticky bottom-4 mt-8 flex justify-center">
-          <button
-            onClick={save}
-            className="bg-sage-800 text-cream rounded-full px-10 py-3.5 shadow-2xl font-medium hover:bg-sage-900"
-          >
-            {saved ? "✓ Tersimpan!" : "💾 Simpan Perubahan"}
-          </button>
-        </div>
-      </main>
-    </div>
-  );
+async function compressToBase64(file: File, maxDim = 1280, quality = 0.8): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        if (width > height) {
+          height = Math.round((height * maxDim) / width);
+          width = maxDim;
+        } else {
+          width = Math.round((width * maxDim) / height);
+          height = maxDim;
+        }
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return reject(new Error("Gagal memproses gambar"));
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("File gambar tidak valid"));
+    };
+    img.src = objectUrl;
+  });
+}
+
+export function usePhotos() {
+  const [photos, setPhotos] = useState<GuestPhoto[]>([]);
+  const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    let stop = false;
+    const pull = async () => {
+      if (!isSheetsConfigured || stop) return;
+      try {
+        const r = await fetch(`${API}?action=getPhotos`).then((x) => x.json());
+        if (Array.isArray(r.photos) && !stop) setPhotos(r.photos);
+      } catch { /* ignore */ }
+    };
+    pull();
+    const timer = setInterval(pull, 20000);
+    return () => {
+      stop = true;
+      clearInterval(timer);
+    };
+  }, []);
+
+  const upload = async (file: File, name: string, caption = "") => {
+    if (!isSheetsConfigured) {
+      alert("API Google Sheets belum dikonfigurasi.");
+      return false;
+    }
+    setUploading(true);
+    try {
+      const base64 = await compressToBase64(file);
+      const res = await post({
+        action: "addPhoto",
+        photo: {
+          name: name.trim(),
+          caption: caption.trim(),
+          base64,
+          mimeType: "image/jpeg",
+        },
+      });
+      if (!res.ok) throw new Error(res.error || "Gagal menyimpan foto ke Google Drive");
+
+      setPhotos((prev) => [
+        {
+          no: res.no ?? Date.now(),
+          name: name.trim(),
+          caption: caption.trim(),
+          url: res.url,
+          at: Date.now(),
+        },
+        ...prev,
+      ]);
+      return true;
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Gagal mengunggah foto.");
+      return false;
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const remove = async (no: number) => {
+    try {
+      const res = await post({ action: "deletePhoto", token: TOKEN, no });
+      if (!res.ok) throw new Error(res.error || "Gagal menghapus foto");
+      setPhotos((prev) => prev.filter((p) => p.no !== no));
+      return true;
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Gagal menghapus foto.");
+      return false;
+    }
+  };
+
+  return { photos, uploading, upload, remove };
 }
