@@ -39,6 +39,30 @@ export function convertDriveAudio(url: string): string {
   return url;
 }
 
+function buildInviteMessage(name: string): string {
+  const personalUrl = guestLink(name);
+  return `Kepada Yth.
+Bapak/Ibu/Saudara/i
+${name}
+di tempat
+
+Assalamu’alaikum Warahmatullahi Wabarakatuh
+
+Dengan hormat, kami mengundang Bapak/Ibu/Saudara/i untuk menghadiri acara pernikahan:
+
+Fajar & Annisa
+
+yang akan diselenggarakan pada:
+Selasa, 15 Desember 2026
+
+Detail lengkap mengenai informasi acara dapat diakses melalui undangan digital berikut:
+${personalUrl}
+
+Besar harapan kami atas kehadiran serta doa restu yang diberikan. Atas perhatian dan kehadirannya, kami ucapkan terima kasih.
+
+Wassalamu’alaikum Warahmatullahi Wabarakatuh`;
+}
+
 export default function Admin() {
   const [authed, setAuthed] = useState(isAuthed());
   const [pw, setPw] = useState("");
@@ -411,8 +435,8 @@ export default function Admin() {
                   </button>
                 </form>
                 <p className="text-xs text-sage-500">
-                  Setiap tamu mendapat <b>link personal</b> — cover undangan otomatis menampilkan namanya (bukan lagi
-                  "Bapak/Ibu/Saudara/i"). Bagikan via WhatsApp.
+                  Klik <b>WA</b> untuk mengirim teks undangan lengkap beserta link personal tamu, atau{" "}
+                  <b>Salin Pesan</b> untuk menempelkannya secara manual.
                 </p>
                 <div className="bg-white rounded-2xl border overflow-hidden">
                   <div className="grid grid-cols-[3rem_1fr_auto] gap-2 px-4 py-2 bg-sage-50 text-xs font-semibold text-sage-600 uppercase">
@@ -424,23 +448,32 @@ export default function Admin() {
                     <div key={g.no} className="grid grid-cols-[3rem_1fr_auto] gap-2 px-4 py-3 border-t items-center">
                       <span className="tabular-nums text-sage-500">{g.no}</span>
                       <span className="font-medium truncate">{g.name}</span>
-                      <span className="flex gap-1.5">
+                      <span className="flex gap-1.5 flex-wrap justify-end">
                         <button
                           onClick={() => {
                             navigator.clipboard?.writeText(guestLink(g.name));
                             alert("Link tersalin:\n" + guestLink(g.name));
                           }}
-                          className="text-xs bg-sage-100 hover:bg-sage-200 rounded-lg px-3 py-1.5"
+                          className="text-xs bg-sage-100 hover:bg-sage-200 rounded-lg px-2.5 py-1.5"
+                          title="Salin link personal saja"
                         >
                           ⧉ Link
                         </button>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard?.writeText(buildInviteMessage(g.name));
+                            alert(`Teks undangan lengkap untuk "${g.name}" berhasil disalin!`);
+                          }}
+                          className="text-xs bg-sage-100 hover:bg-sage-200 rounded-lg px-2.5 py-1.5"
+                          title="Salin seluruh teks undangan"
+                        >
+                          📋 Pesan
+                        </button>
                         <a
-                          href={`https://wa.me/?text=${encodeURIComponent(
-                            "Assalamu'alaikum, mohon doa restu 🙏\n" + guestLink(g.name)
-                          )}`}
+                          href={`https://wa.me/?text=${encodeURIComponent(buildInviteMessage(g.name))}`}
                           target="_blank"
-                          rel="noreferrer"
-                          className="text-xs bg-green-100 text-green-800 hover:bg-green-200 rounded-lg px-3 py-1.5"
+                          rel="noopener noreferrer"
+                          className="text-xs bg-green-100 text-green-800 hover:bg-green-200 rounded-lg px-3 py-1.5 font-medium"
                         >
                           WA
                         </a>
@@ -448,7 +481,7 @@ export default function Admin() {
                           onClick={() => {
                             if (confirm(`Hapus ${g.name}?`)) removeGuest(g.no);
                           }}
-                          className="text-xs bg-red-50 text-red-600 hover:bg-red-100 rounded-lg px-3 py-1.5"
+                          className="text-xs bg-red-50 text-red-600 hover:bg-red-100 rounded-lg px-2.5 py-1.5"
                         >
                           ✕
                         </button>
