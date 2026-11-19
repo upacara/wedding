@@ -17,7 +17,7 @@ export const WEDDING = {
     address: "Jl. Raya Gayaman No.57, Gayaman, Kec. Mojoanyar, Kabupaten Mojokerto, Jawa Timur 61364"
   },
   mapsUrl: "https://maps.app.goo.gl/yXi3DsfmYUmqRGsT6",
-  gifts: [
+ gifts: [
     {
       bank: "BNI",
       number: "1178647505",
@@ -29,6 +29,12 @@ export const WEDDING = {
       name: "Fajar Rachmadi"
     }
   ],
+  giftAddress: {
+    recipient: "Fajar Rachmadi",
+    phone: "085156151376",
+    address: "Isi alamat lengkap pengiriman kado beserta kode pos",
+    note: "Patokan rumah / catatan kurir (opsional)"
+  },
   musicUrl: "https://res.cloudinary.com/pslavszr/video/upload/v1790743147/wedding/rdfqee45l5i8yxlya0si.mp3",
   heroPhoto: "https://drive.google.com/thumbnail?id=19Q2v5buF7R5uYXIjzm0fzSEe_61k9fOA&sz=w1000",
   groomPhoto: "https://drive.google.com/thumbnail?id=1lLPCIlflzPyQW-bhiflelnBAPvuWPqXT&sz=w1000",
