@@ -30,9 +30,9 @@ export const WEDDING = {
     }
   ],
   giftAddress: {
-    recipient: "Fajar Rachmadi",
-    phone: "085156151376",
-    address: "Isi alamat lengkap pengiriman kado beserta kode pos",
+    recipient: "Annisa",
+    phone: "085183102284",
+    address: "Dsn. Waru, Desa Waru Beron, RT/RW 007/002, Kec. Balongbendo, Kab Sidoarjo (Rumah Bu Asih, Kasi Pelayanan)",
     note: "Patokan rumah / catatan kurir (opsional)"
   },
   musicUrl: "https://res.cloudinary.com/pslavszr/video/upload/v1790743147/wedding/rdfqee45l5i8yxlya0si.mp3",
