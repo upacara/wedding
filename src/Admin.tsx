@@ -318,6 +318,37 @@ export default function Admin() {
             ))}
             <button onClick={() => set("gifts", [...cfg.gifts, { bank: "BCA", number: "", name: "" }])}
               className={`${btn} bg-sage-100 text-sage-800 hover:bg-sage-200`}>＋ Tambah rekening</button>
+
+            <div className="bg-white rounded-2xl border p-4 space-y-3">
+              <p className={label}>Alamat Pengiriman Hadiah Fisik (kosongkan alamat jika ingin disembunyikan)</p>
+              <div className="grid md:grid-cols-2 gap-2">
+                <input
+                  value={cfg.giftAddress?.recipient || ""}
+                  placeholder="Nama Penerima"
+                  onChange={(e) => set("giftAddress", { ...cfg.giftAddress, recipient: e.target.value })}
+                  className={input}
+                />
+                <input
+                  value={cfg.giftAddress?.phone || ""}
+                  placeholder="No. HP / WhatsApp Penerima"
+                  onChange={(e) => set("giftAddress", { ...cfg.giftAddress, phone: e.target.value })}
+                  className={input}
+                />
+              </div>
+              <textarea
+                rows={3}
+                value={cfg.giftAddress?.address || ""}
+                placeholder="Alamat lengkap pengiriman kado (Jalan, RT/RW, Kel/Desa, Kec, Kota/Kab, Kode Pos)"
+                onChange={(e) => set("giftAddress", { ...cfg.giftAddress, address: e.target.value })}
+                className={input}
+              />
+              <input
+                value={cfg.giftAddress?.note || ""}
+                placeholder="Catatan / Patokan lokasi (opsional)"
+                onChange={(e) => set("giftAddress", { ...cfg.giftAddress, note: e.target.value })}
+                className={input}
+              />
+            </div>
             <div><p className={label}>URL Musik latar</p>
               <input value={cfg.musicUrl} placeholder="https://... atau link Google Drive"
                 onChange={(e) => set("musicUrl", convertDriveAudio(e.target.value.trim()))} className={`${input} mt-1`} />
