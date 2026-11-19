@@ -2,8 +2,12 @@ import { useEffect, useState } from "react";
 import { WEDDING as DEFAULT_WEDDING, GALLERY as DEFAULT_GALLERY, STORY as DEFAULT_STORY } from "./data";
 
 export type Gift = { bank: string; number: string; name: string };
+export type GiftAddress = { recipient: string; phone: string; address: string; note?: string };
 export type StoryItem = { year: string; title: string; text: string };
-export type WeddingConfig = typeof DEFAULT_WEDDING & { gifts: Gift[] } & {
+export type WeddingConfig = typeof DEFAULT_WEDDING & {
+  gifts: Gift[];
+  giftAddress: GiftAddress;
+} & {
   gallery: string[];
   story: StoryItem[];
   musicUrl: string;
@@ -33,6 +37,7 @@ const SEED_WISHES: Wish[] = [
 export const defaults = (): WeddingConfig => ({
   ...DEFAULT_WEDDING,
   gifts: [...DEFAULT_WEDDING.gifts],
+  giftAddress: { ...DEFAULT_WEDDING.giftAddress },
   gallery: [...DEFAULT_GALLERY],
   story: [...DEFAULT_STORY],
   musicUrl: "https://res.cloudinary.com/pslavszr/video/upload/v1790743147/wedding/rdfqee45l5i8yxlya0si.mp3",
@@ -41,11 +46,23 @@ export const defaults = (): WeddingConfig => ({
   bridePhoto: "https://lh3.googleusercontent.com/d/1yMnlEdW30D8z_M8HzmSi0ul7-RZX3nC_",
 });
 
+function mergeConfig(raw: Partial<WeddingConfig>): WeddingConfig {
+  const base = defaults();
+  return {
+    ...base,
+    ...raw,
+    giftAddress: {
+      ...base.giftAddress,
+      ...(raw.giftAddress || {}),
+    },
+  };
+}
+
 export function loadLocal(): WeddingConfig {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return defaults();
-    return { ...defaults(), ...JSON.parse(raw) };
+    return mergeConfig(JSON.parse(raw));
   } catch {
     return defaults();
   }
@@ -96,7 +113,7 @@ export function useCmsConfig(): WeddingConfig {
       try {
         const r = await fetch(`${API}?action=getConfig`).then((x) => x.json());
         if (r.config) {
-          const merged = { ...defaults(), ...r.config };
+          const merged = mergeConfig(r.config);
           setCfg(merged);
           localStorage.setItem(KEY, JSON.stringify(merged));
         }
@@ -108,7 +125,7 @@ export function useCmsConfig(): WeddingConfig {
       try {
         const r = await fetch(`${API}?action=getConfig`).then((x) => x.json());
         if (r.config && !stop) {
-          const merged = { ...defaults(), ...r.config };
+          const merged = mergeConfig(r.config);
           setCfg(merged);
           localStorage.setItem(KEY, JSON.stringify(merged));
         }
