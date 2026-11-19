@@ -34,10 +34,20 @@ const SEED_WISHES: Wish[] = [
   { name: "Sinta & Andi", msg: "Happy wedding! Semoga menjadi keluarga sakinah mawaddah warahmah.", attend: "Hadir", at: 2 },
 ];
 
+const DEFAULT_GIFT_ADDRESS: GiftAddress = {
+  recipient: "",
+  phone: "",
+  address: "",
+  note: "",
+};
+
 export const defaults = (): WeddingConfig => ({
   ...DEFAULT_WEDDING,
   gifts: [...DEFAULT_WEDDING.gifts],
-  giftAddress: { ...DEFAULT_WEDDING.giftAddress },
+  giftAddress: {
+    ...DEFAULT_GIFT_ADDRESS,
+    ...((DEFAULT_WEDDING as Partial<WeddingConfig>).giftAddress || {}),
+  },
   gallery: [...DEFAULT_GALLERY],
   story: [...DEFAULT_STORY],
   musicUrl: "https://res.cloudinary.com/pslavszr/video/upload/v1790743147/wedding/rdfqee45l5i8yxlya0si.mp3",
@@ -274,6 +284,7 @@ export function logout() {
 export function changePassword(next: string) {
   localStorage.setItem("wedding-cms-password", next);
 }
+
 // ---------- Live Guest Photos (Google Drive via Apps Script) ----------
 
 export type GuestPhoto = {
@@ -385,10 +396,6 @@ export function usePhotos() {
       alert(e instanceof Error ? e.message : "Gagal menghapus foto.");
       return false;
     }
-  };
-
-  return { photos, uploading, upload, remove };
-}
   };
 
   return { photos, uploading, upload, remove };
