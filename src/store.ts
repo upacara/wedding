@@ -274,3 +274,129 @@ export function logout() {
 export function changePassword(next: string) {
   localStorage.setItem("wedding-cms-password", next);
 }
+// ---------- Live Guest Photos ----------
+
+export type GuestPhoto = {
+  no?: number;
+  name: string;
+  caption?: string;
+  url: string;
+  at: number;
+};
+
+const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD || "";
+const CLOUD_PRESET = import.meta.env.VITE_CLOUDINARY_PRESET || "";
+export const isPhotoUploadConfigured = Boolean(API && CLOUD_NAME && CLOUD_PRESET);
+
+async function compressPhoto(file: File, maxDim = 1600, quality = 0.82): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        if (width > height) {
+          height = Math.round((height * maxDim) / width);
+          width = maxDim;
+        } else {
+          width = Math.round((width * maxDim) / height);
+          height = maxDim;
+        }
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return resolve(file);
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error("Gagal memproses gambar"))),
+        "image/jpeg",
+        quality
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("File gambar tidak valid"));
+    };
+    img.src = objectUrl;
+  });
+}
+
+export function usePhotos() {
+  const [photos, setPhotos] = useState<GuestPhoto[]>([]);
+  const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    let stop = false;
+    const pull = async () => {
+      if (!isSheetsConfigured || stop) return;
+      try {
+        const r = await fetch(`${API}?action=getPhotos`).then((x) => x.json());
+        if (Array.isArray(r.photos) && !stop) setPhotos(r.photos);
+      } catch { /* ignore */ }
+    };
+    pull();
+    const timer = setInterval(pull, 20000);
+    return () => {
+      stop = true;
+      clearInterval(timer);
+    };
+  }, []);
+
+  const upload = async (file: File, name: string, caption = "") => {
+    if (!isPhotoUploadConfigured) {
+      alert("Fitur upload foto belum dikonfigurasi di .env");
+      return false;
+    }
+    setUploading(true);
+    try {
+      const compressed = await compressPhoto(file);
+      const fd = new FormData();
+      fd.append("file", compressed, "moment.jpg");
+      fd.append("upload_preset", CLOUD_PRESET);
+      fd.append("folder", "wedding-guest-moments");
+
+      const cloudRes = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
+        method: "POST",
+        body: fd,
+      }).then((r) => r.json());
+
+      if (!cloudRes.secure_url) {
+        throw new Error(cloudRes.error?.message || "Gagal upload ke Cloudinary");
+      }
+
+      const res = await post({
+        action: "addPhoto",
+        photo: { name: name.trim(), caption: caption.trim(), url: cloudRes.secure_url },
+      });
+      if (!res.ok) throw new Error(res.error || "Gagal menyimpan ke Sheets");
+
+      setPhotos((prev) => [
+        { no: res.no ?? Date.now(), name: name.trim(), caption: caption.trim(), url: cloudRes.secure_url, at: Date.now() },
+        ...prev,
+      ]);
+      return true;
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Gagal mengunggah foto.");
+      return false;
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const remove = async (no: number) => {
+    try {
+      const res = await post({ action: "deletePhoto", token: TOKEN, no });
+      if (!res.ok) throw new Error(res.error || "Gagal menghapus foto");
+      setPhotos((prev) => prev.filter((p) => p.no !== no));
+      return true;
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Gagal menghapus foto.");
+      return false;
+    }
+  };
+
+  return { photos, uploading, upload, remove };
+}
