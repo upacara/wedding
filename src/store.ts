@@ -2,12 +2,11 @@ import { useEffect, useState } from "react";
 import { WEDDING as DEFAULT_WEDDING, GALLERY as DEFAULT_GALLERY, STORY as DEFAULT_STORY } from "./data";
 
 export type Gift = { bank: string; number: string; name: string };
-export type GiftAddress = { recipient: string; phone: string; address: string; note?: string };
+export type GiftAddress = { recipient: string; phone: string; address: string; note: string };
 export type StoryItem = { year: string; title: string; text: string };
-export type WeddingConfig = typeof DEFAULT_WEDDING & {
+export type WeddingConfig = Omit<typeof DEFAULT_WEDDING, "gifts" | "giftAddress"> & {
   gifts: Gift[];
   giftAddress: GiftAddress;
-} & {
   gallery: string[];
   story: StoryItem[];
   musicUrl: string;
@@ -24,7 +23,7 @@ const WISH_KEY = "wedding-wishes";
 const AUTH_KEY = "wedding-cms-auth";
 export const DEFAULT_PASSWORD = "admin123";
 
-// Backend: Google Apps Script → Sheets (gratis). Kosong = mode lokal saja.
+// Backend: Google Apps Script -> Sheets (gratis). Kosong = mode lokal saja.
 const API = import.meta.env.VITE_SHEETS_API_URL || "";
 const TOKEN = import.meta.env.VITE_SHEETS_TOKEN || "";
 export const isSheetsConfigured = Boolean(API);
@@ -34,27 +33,25 @@ const SEED_WISHES: Wish[] = [
   { name: "Sinta & Andi", msg: "Happy wedding! Semoga menjadi keluarga sakinah mawaddah warahmah.", attend: "Hadir", at: 2 },
 ];
 
-const DEFAULT_GIFT_ADDRESS: GiftAddress = {
-  recipient: "",
-  phone: "",
-  address: "",
-  note: "",
+export const defaults = (): WeddingConfig => {
+  const rawAddr = (DEFAULT_WEDDING as Partial<WeddingConfig>).giftAddress;
+  return {
+    ...DEFAULT_WEDDING,
+    gifts: [...DEFAULT_WEDDING.gifts],
+    giftAddress: {
+      recipient: rawAddr?.recipient ?? "",
+      phone: rawAddr?.phone ?? "",
+      address: rawAddr?.address ?? "",
+      note: rawAddr?.note ?? "",
+    },
+    gallery: [...DEFAULT_GALLERY],
+    story: [...DEFAULT_STORY],
+    musicUrl: "https://res.cloudinary.com/pslavszr/video/upload/v1790743147/wedding/rdfqee45l5i8yxlya0si.mp3",
+    heroPhoto: "https://drive.google.com/thumbnail?id=1_1u2ctDUN4jMepfgO7YH-LyzQS-dNmmi&sz=w1000",
+    groomPhoto: "https://lh3.googleusercontent.com/d/1lLPCIlflzPyQW-bhiflelnBAPvuWPqXT",
+    bridePhoto: "https://lh3.googleusercontent.com/d/1yMnlEdW30D8z_M8HzmSi0ul7-RZX3nC_",
+  };
 };
-
-export const defaults = (): WeddingConfig => ({
-  ...DEFAULT_WEDDING,
-  gifts: [...DEFAULT_WEDDING.gifts],
-  giftAddress: {
-    ...DEFAULT_GIFT_ADDRESS,
-    ...((DEFAULT_WEDDING as Partial<WeddingConfig>).giftAddress || {}),
-  },
-  gallery: [...DEFAULT_GALLERY],
-  story: [...DEFAULT_STORY],
-  musicUrl: "https://res.cloudinary.com/pslavszr/video/upload/v1790743147/wedding/rdfqee45l5i8yxlya0si.mp3",
-  heroPhoto: "https://drive.google.com/thumbnail?id=1_1u2ctDUN4jMepfgO7YH-LyzQS-dNmmi&sz=w1000",
-  groomPhoto: "https://lh3.googleusercontent.com/d/1lLPCIlflzPyQW-bhiflelnBAPvuWPqXT",
-  bridePhoto: "https://lh3.googleusercontent.com/d/1yMnlEdW30D8z_M8HzmSi0ul7-RZX3nC_",
-});
 
 function mergeConfig(raw: Partial<WeddingConfig>): WeddingConfig {
   const base = defaults();
@@ -62,8 +59,10 @@ function mergeConfig(raw: Partial<WeddingConfig>): WeddingConfig {
     ...base,
     ...raw,
     giftAddress: {
-      ...base.giftAddress,
-      ...(raw.giftAddress || {}),
+      recipient: raw.giftAddress?.recipient ?? base.giftAddress.recipient,
+      phone: raw.giftAddress?.phone ?? base.giftAddress.phone,
+      address: raw.giftAddress?.address ?? base.giftAddress.address,
+      note: raw.giftAddress?.note ?? base.giftAddress.note,
     },
   };
 }
@@ -81,7 +80,7 @@ export function loadLocal(): WeddingConfig {
 function post(body: Record<string, unknown>) {
   return fetch(API, {
     method: "POST",
-    headers: { "Content-Type": "text/plain" }, // hindari preflight CORS
+    headers: { "Content-Type": "text/plain" },
     body: JSON.stringify(body),
   }).then((r) => r.json());
 }
@@ -110,7 +109,7 @@ export async function resetConfig() {
   }
 }
 
-/** Config live: Sheets → fallback localStorage. */
+/** Config live: Sheets -> fallback localStorage. */
 export function useCmsConfig(): WeddingConfig {
   const [cfg, setCfg] = useState<WeddingConfig>(loadLocal);
   useEffect(() => {
@@ -127,9 +126,8 @@ export function useCmsConfig(): WeddingConfig {
           setCfg(merged);
           localStorage.setItem(KEY, JSON.stringify(merged));
         }
-      } catch { /* offline — pakai lokal */ }
+      } catch { /* offline */ }
     }, 30000);
-    // ambil sekali saat load
     (async () => {
       if (!isSheetsConfigured) return;
       try {
@@ -208,7 +206,6 @@ export function useWishes() {
 
 // ---------- Guest list ----------
 
-/** Link undangan personal: cover otomatis menampilkan nama tamu. */
 export function guestLink(name: string) {
   return `${window.location.origin}${window.location.pathname}?to=${encodeURIComponent(name)}`;
 }
