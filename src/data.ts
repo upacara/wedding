@@ -4,7 +4,7 @@ export const WEDDING = {
   bride: "Annisa Nur Fadhilah",
   groomFather: "Bpk. Nur Achmad & Ibu Luh Putu Wardani",
   brideFather: "Bpk. Husen & Ibu Asih Wulyaning",
-  dateISO: "2026-12-20T08:00:00+07:00",
+  dateISO: "2026-12-15T08:00:00+07:00",
   dateText: "Rabu, 15 Desember 2026",
   akad: {
     time: "08.00 – 11.00 WIB",
