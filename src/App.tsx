@@ -66,7 +66,6 @@ export default function App() {
     return () => { document.body.style.overflow = ""; };
   }, [opened]);
 
-  // Judul tab browser mengikuti nama mempelai dari admin
   useEffect(() => {
     const g = WEDDING.groom.split(" ")[0];
     const b = WEDDING.bride.split(" ")[0];
@@ -362,4 +361,208 @@ export default function App() {
                   <option>2</option>
                   <option>3</option>
                   <option>4</option>
-                </
+                </select>
+              </div>
+            </div>
+            <label className="text-sm font-medium">Ucapan & doa</label>
+            <textarea
+              value={rsvp.msg}
+              onChange={(e) => setRsvp({ ...rsvp, msg: e.target.value })}
+              rows={4}
+              placeholder="Tulis doa terbaik..."
+              className="w-full border border-sage-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-sage-400 bg-cream"
+              required
+            />
+            <button
+              disabled={sending}
+              className="w-full bg-sage-700 text-cream rounded-xl py-3 font-medium hover:bg-sage-800 transition disabled:opacity-60"
+            >
+              {sending ? "Mengirim..." : "Kirim Konfirmasi & Ucapan"}
+            </button>
+            <p className="text-[11px] text-sage-500 text-center">
+              Ucapan Anda akan tampil untuk semua tamu. Mohon gunakan kata-kata yang baik.
+            </p>
+          </form>
+          <div className="reveal bg-sage-800 text-cream rounded-3xl p-7 shadow-lg">
+            <h3 className="font-serif2 text-xl">Wishes ({seedWishes.length})</h3>
+            <div className="noscroll mt-4 space-y-3 max-h-[380px] overflow-y-auto pr-1">
+              {seedWishes.map((w, i) => (
+                <div key={i} className="bg-white/10 rounded-2xl p-4 border border-white/10">
+                  <div className="flex items-center justify-between">
+                    <p className="font-medium text-gold-light text-sm">{w.name}</p>
+                    <span
+                      className={`text-[10px] px-2 py-1 rounded-full ${
+                        w.attend.includes("Berhalangan") ? "bg-red-400/30" : "bg-green-400/30"
+                      }`}
+                    >
+                      {w.attend}
+                    </span>
+                  </div>
+                  <p className="text-sm text-cream/90 mt-1 leading-relaxed">{w.msg}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* LIVE GUEST PHOTOS */}
+      <section className="bg-sage-50 border-t border-sage-100">
+        <div className="max-w-4xl mx-auto px-6 py-16 text-center">
+          <h2 className="reveal font-script text-5xl text-sage-800">Momen Tamu</h2>
+          <p className="reveal text-sage-600 mt-3 text-sm leading-relaxed max-w-lg mx-auto">
+            Abadikan & bagikan momen kebahagiaan Anda selama acara berlangsung di dinding galeri kami.
+          </p>
+
+          <form
+            onSubmit={submitPhoto}
+            className="reveal bg-white border border-sage-200 rounded-3xl p-6 max-w-lg mx-auto mt-8 text-left shadow-sm space-y-3"
+          >
+            <div>
+              <label className="text-xs font-medium text-sage-700">Nama Anda *</label>
+              <input
+                value={photoName}
+                onChange={(e) => setPhotoName(e.target.value)}
+                required
+                maxLength={80}
+                placeholder="Contoh: Budi & Keluarga"
+                className="mt-1 w-full rounded-xl border border-sage-200 bg-cream px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sage-400"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-sage-700">Pilih / Ambil Foto Acara *</label>
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                required
+                onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
+                className="mt-1 w-full text-sm text-sage-600 file:mr-3 file:rounded-full file:border-0 file:bg-sage-100 file:px-4 file:py-2 file:text-xs file:font-medium file:text-sage-800 hover:file:bg-sage-200"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-sage-700">Caption Singkat (opsional)</label>
+              <input
+                value={photoCaption}
+                onChange={(e) => setPhotoCaption(e.target.value)}
+                maxLength={200}
+                placeholder="Selamat menempuh hidup baru!"
+                className="mt-1 w-full rounded-xl border border-sage-200 bg-cream px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sage-400"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={uploading}
+              className="w-full rounded-full bg-sage-700 text-cream py-3 text-sm font-medium hover:bg-sage-800 transition disabled:opacity-60"
+            >
+              {uploading ? "Mengunggah Foto..." : "📸 Bagikan Foto Momen"}
+            </button>
+          </form>
+
+          {photos.length > 0 ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4 mt-10 text-left">
+              {photos.map((p, idx) => {
+                const thumbUrl = p.url.includes("/upload/")
+                  ? p.url.replace("/upload/", "/upload/f_auto,q_auto,w_700/")
+                  : p.url;
+                return (
+                  <a
+                    key={p.no ?? idx}
+                    href={p.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group bg-white rounded-2xl overflow-hidden border border-sage-100 shadow-sm hover:shadow-md transition flex flex-col"
+                  >
+                    <div className="aspect-square overflow-hidden bg-sage-100">
+                      <img
+                        src={thumbUrl}
+                        alt={p.caption || `Foto dari ${p.name}`}
+                        loading="lazy"
+                        className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                      />
+                    </div>
+                    <div className="p-3">
+                      <p className="text-xs font-semibold text-sage-800 truncate">{p.name}</p>
+                      {p.caption && <p className="text-xs text-sage-600 mt-0.5 line-clamp-2">{p.caption}</p>}
+                    </div>
+                  </a>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-sage-500 mt-8">
+              Belum ada foto yang dibagikan. Jadilah tamu pertama yang mengunggah momen!
+            </p>
+          )}
+        </div>
+      </section>
+
+      {/* GIFT */}
+      <section className="bg-white border-t border-sage-100">
+        <div className="max-w-2xl mx-auto px-6 py-16 text-center">
+          <h2 className="reveal font-script text-5xl text-sage-800">Tanda Kasih</h2>
+          <p className="reveal text-sage-600 mt-3 text-sm leading-relaxed">
+            Kehadiran Anda adalah hadiah terindah. Namun jika berkenan memberi tanda kasih, kami sediakan dengan penuh
+            syukur:
+          </p>
+          <div className="space-y-4 mt-8">
+            {WEDDING.gifts.map((g) => (
+              <div key={g.number} className="reveal bg-cream border border-gold/40 rounded-2xl p-6 shadow">
+                <p className="tracking-[0.25em] text-xs text-gold-dark font-semibold">{g.bank}</p>
+                <p className="font-serif2 text-3xl tracking-wider mt-2 tabular-nums">{g.number}</p>
+                <p className="text-sm text-sage-500">a.n. {g.name}</p>
+                <button
+                  onClick={() => copy(g.number)}
+                  className="mt-4 border border-sage-700 rounded-full px-6 py-2 text-sm hover:bg-sage-700 hover:text-cream transition"
+                >
+                  {copied === g.number ? "✓ Tersalin!" : "⧉ Salin Nomor"}
+                </button>
+              </div>
+            ))}
+
+            {WEDDING.giftAddress?.address && (() => {
+              const addr = WEDDING.giftAddress;
+              const fullAddress = `${addr.recipient} (${addr.phone})\n${addr.address}`;
+              return (
+                <div className="reveal bg-cream border border-gold/40 rounded-2xl p-6 shadow">
+                  <p className="tracking-[0.25em] text-xs text-gold-dark font-semibold uppercase">Kirim Hadiah Fisik</p>
+                  <p className="font-serif2 text-2xl mt-2 text-sage-800">{addr.recipient}</p>
+                  {addr.phone && <p className="text-sm text-sage-600 mt-0.5 tabular-nums">{addr.phone}</p>}
+                  <p className="text-sm text-sage-700 mt-2 leading-relaxed max-w-md mx-auto">{addr.address}</p>
+                  {addr.note && <p className="text-xs italic text-sage-500 mt-1.5">Catatan: {addr.note}</p>}
+                  <button
+                    onClick={() => copy(fullAddress, false)}
+                    className="mt-4 border border-sage-700 rounded-full px-6 py-2 text-sm hover:bg-sage-700 hover:text-cream transition"
+                  >
+                    {copied === fullAddress ? "✓ Alamat Tersalin!" : "⧉ Salin Alamat"}
+                  </button>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      </section>
+
+      <footer
+        className="text-center px-6 py-14 text-cream"
+        style={{ background: "linear-gradient(180deg,#43563f,#2f3a2d)" }}
+      >
+        <p className="text-sm text-cream/70">
+          Merupakan suatu kehormatan & kebahagiaan bagi kami apabila Bapak/Ibu/Saudara/i berkenan hadir & mendoakan.
+        </p>
+        <h2 className="font-script text-5xl mt-4">
+          {WEDDING.groom.split(" ")[0]} & {WEDDING.bride.split(" ")[0]}
+        </h2>
+        <p className="text-xs tracking-[0.3em] uppercase mt-6 text-cream/50">
+          wedding.fajarrachmadi.my.id • {new Date().getFullYear()}
+        </p>
+        <a href="#/admin" className="inline-block mt-3 text-[11px] text-cream/40 hover:text-cream/80 hover:underline">
+          ⚙ Admin
+        </a>
+      </footer>
+    </div>
+  );
+}
