@@ -274,7 +274,7 @@ export function logout() {
 export function changePassword(next: string) {
   localStorage.setItem("wedding-cms-password", next);
 }
-// ---------- Live Guest Photos ----------
+// ---------- Live Guest Photos (Google Drive via Apps Script) ----------
 
 export type GuestPhoto = {
   no?: number;
@@ -284,11 +284,7 @@ export type GuestPhoto = {
   at: number;
 };
 
-const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD || "";
-const CLOUD_PRESET = import.meta.env.VITE_CLOUDINARY_PRESET || "";
-export const isPhotoUploadConfigured = Boolean(API && CLOUD_NAME && CLOUD_PRESET);
-
-async function compressPhoto(file: File, maxDim = 1600, quality = 0.82): Promise<Blob> {
+async function compressToBase64(file: File, maxDim = 1280, quality = 0.8): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const objectUrl = URL.createObjectURL(file);
@@ -308,13 +304,9 @@ async function compressPhoto(file: File, maxDim = 1600, quality = 0.82): Promise
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext("2d");
-      if (!ctx) return resolve(file);
+      if (!ctx) return reject(new Error("Gagal memproses gambar"));
       ctx.drawImage(img, 0, 0, width, height);
-      canvas.toBlob(
-        (blob) => (blob ? resolve(blob) : reject(new Error("Gagal memproses gambar"))),
-        "image/jpeg",
-        quality
-      );
+      resolve(canvas.toDataURL("image/jpeg", quality));
     };
     img.onerror = () => {
       URL.revokeObjectURL(objectUrl);
@@ -346,35 +338,32 @@ export function usePhotos() {
   }, []);
 
   const upload = async (file: File, name: string, caption = "") => {
-    if (!isPhotoUploadConfigured) {
-      alert("Fitur upload foto belum dikonfigurasi di .env");
+    if (!isSheetsConfigured) {
+      alert("API Google Sheets belum dikonfigurasi.");
       return false;
     }
     setUploading(true);
     try {
-      const compressed = await compressPhoto(file);
-      const fd = new FormData();
-      fd.append("file", compressed, "moment.jpg");
-      fd.append("upload_preset", CLOUD_PRESET);
-      fd.append("folder", "wedding-guest-moments");
-
-      const cloudRes = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
-        method: "POST",
-        body: fd,
-      }).then((r) => r.json());
-
-      if (!cloudRes.secure_url) {
-        throw new Error(cloudRes.error?.message || "Gagal upload ke Cloudinary");
-      }
-
+      const base64 = await compressToBase64(file);
       const res = await post({
         action: "addPhoto",
-        photo: { name: name.trim(), caption: caption.trim(), url: cloudRes.secure_url },
+        photo: {
+          name: name.trim(),
+          caption: caption.trim(),
+          base64,
+          mimeType: "image/jpeg",
+        },
       });
-      if (!res.ok) throw new Error(res.error || "Gagal menyimpan ke Sheets");
+      if (!res.ok) throw new Error(res.error || "Gagal menyimpan foto ke Google Drive");
 
       setPhotos((prev) => [
-        { no: res.no ?? Date.now(), name: name.trim(), caption: caption.trim(), url: cloudRes.secure_url, at: Date.now() },
+        {
+          no: res.no ?? Date.now(),
+          name: name.trim(),
+          caption: caption.trim(),
+          url: res.url,
+          at: Date.now(),
+        },
         ...prev,
       ]);
       return true;
@@ -396,6 +385,10 @@ export function usePhotos() {
       alert(e instanceof Error ? e.message : "Gagal menghapus foto.");
       return false;
     }
+  };
+
+  return { photos, uploading, upload, remove };
+}
   };
 
   return { photos, uploading, upload, remove };
