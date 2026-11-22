@@ -14,7 +14,7 @@ function wordToFlexibleRegex(word: string): RegExp {
     e: "[e3]",
     o: "[o0]",
     s: "[s$5]",
-    g: "[g9]",
+    g: "[g9nk]",
     t: "[t7]",
   };
 
