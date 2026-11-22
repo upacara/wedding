@@ -44,6 +44,9 @@ function guestName(): string {
 }
 
 export default function App() {
+  // Ubah menjadi false jika undangan sudah siap dibuka kembali untuk tamu
+  const MAINTENANCE_MODE: boolean = true;
+
   const [opened, setOpened] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
