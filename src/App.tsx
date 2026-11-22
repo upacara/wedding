@@ -53,10 +53,6 @@ export default function App() {
     const p = new URLSearchParams(window.location.search).get("to");
     return p ? decodeURIComponent(p) : "";
   }, []);
-  const [photoName, setPhotoName] = useState(initialTo);
-  const [photoCaption, setPhotoCaption] = useState("");
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
-  const photoInputRef = useRef<HTMLInputElement>(null);
 
   const { wishes, sending, send } = useWishes();
   const { photos, uploading, upload } = usePhotos();
@@ -105,17 +101,6 @@ export default function App() {
     if (!rsvp.name.trim() || !rsvp.msg.trim()) return;
     const ok = await send({ name: rsvp.name.trim(), msg: rsvp.msg.trim(), attend: rsvp.attend, guests: rsvp.guests });
     if (ok) setRsvp({ name: "", attend: "Hadir", guests: "1", msg: "" });
-  };
-
-  const submitPhoto = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!photoFile || !photoName.trim()) return;
-    const ok = await upload(photoFile, photoName.trim(), photoCaption.trim());
-    if (ok) {
-      setPhotoCaption("");
-      setPhotoFile(null);
-      if (photoInputRef.current) photoInputRef.current.value = "";
-    }
   };
 
   const calendarUrl = useMemo(() => {
@@ -430,56 +415,18 @@ export default function App() {
         <div className="max-w-4xl mx-auto px-6 py-16 text-center">
           <h2 className="reveal font-script text-5xl text-sage-800">Momen Tamu</h2>
           <p className="reveal text-sage-600 mt-3 text-sm leading-relaxed max-w-lg mx-auto">
-            Abadikan & bagikan momen kebahagiaan Anda selama acara berlangsung di dinding galeri kami.
+            Abadikan & bagikan momen kebahagiaan Anda dengan bingkai Polaroid langsung dari kamera atau galeri.
           </p>
 
-          <form
-            onSubmit={submitPhoto}
-            className="reveal bg-white border border-sage-200 rounded-3xl p-6 max-w-lg mx-auto mt-8 text-left shadow-sm space-y-3"
-          >
-            <div>
-              <label className="text-xs font-medium text-sage-700">Nama Anda *</label>
-              <input
-                value={photoName}
-                onChange={(e) => setPhotoName(e.target.value)}
-                required
-                maxLength={80}
-                placeholder="Contoh: Budi & Keluarga"
-                className="mt-1 w-full rounded-xl border border-sage-200 bg-cream px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sage-400"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-sage-700">Pilih / Ambil Foto Acara *</label>
-              <input
-                ref={photoInputRef}
-                type="file"
-                accept="image/*"
-                required
-                onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
-                className="mt-1 w-full text-sm text-sage-600 file:mr-3 file:rounded-full file:border-0 file:bg-sage-100 file:px-4 file:py-2 file:text-xs file:font-medium file:text-sage-800 hover:file:bg-sage-200"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-sage-700">Caption Singkat (opsional)</label>
-              <input
-                value={photoCaption}
-                onChange={(e) => setPhotoCaption(e.target.value)}
-                maxLength={200}
-                placeholder="Selamat menempuh hidup baru!"
-                className="mt-1 w-full rounded-xl border border-sage-200 bg-cream px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sage-400"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={uploading}
-              className="w-full rounded-full bg-sage-700 text-cream py-3 text-sm font-medium hover:bg-sage-800 transition disabled:opacity-60"
-            >
-              {uploading ? "Mengunggah Foto..." : "📸 Bagikan Foto Momen"}
-            </button>
-          </form>
+          <div className="reveal max-w-lg mx-auto mt-8 text-left">
+            <PolaroidCamera
+              defaultName={initialTo}
+              coupleTitle={`${WEDDING.groom.split(" ")[0]} & ${WEDDING.bride.split(" ")[0]}`}
+              dateLabel={WEDDING.dateText}
+              uploading={uploading}
+              onSubmitPhoto={upload}
+            />
+          </div>
 
           {photos.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4 mt-10 text-left">
@@ -495,7 +442,7 @@ export default function App() {
                     rel="noopener noreferrer"
                     className="group bg-white rounded-2xl overflow-hidden border border-sage-100 shadow-sm hover:shadow-md transition flex flex-col"
                   >
-                    <div className="aspect-square overflow-hidden bg-sage-100">
+                    <div className="aspect-[4/5] overflow-hidden bg-sage-100">
                       <img
                         src={thumbUrl}
                         alt={p.caption || `Foto dari ${p.name}`}
