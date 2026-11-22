@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCmsConfig, useWishes, usePhotos } from "./store";
 import PolaroidCamera from "./PolaroidCamera";
+import { censorProfanity } from "./profanityFilter";
 
 function parseWibDate(iso: string): Date {
   const clean = (iso || "").trim();
@@ -410,23 +411,33 @@ export default function App() {
               Ucapan Anda akan tampil untuk semua tamu. Mohon gunakan kata-kata yang baik.
             </p>
           </form>
-          <div className="reveal bg-sage-800 text-cream rounded-3xl p-7 shadow-lg">
+         <div className="reveal bg-sage-800 text-cream rounded-3xl p-7 shadow-lg">
             <h3 className="font-serif2 text-xl">Wishes ({seedWishes.length})</h3>
             <div className="noscroll mt-4 space-y-3 max-h-[380px] overflow-y-auto pr-1">
-              {seedWishes.map((w, i) => (
-                <div key={i} className="bg-white/10 rounded-2xl p-4 border border-white/10">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium text-gold-light text-sm">{w.name}</p>
-                    <span
-                      className={`text-[10px] px-2 py-1 rounded-full ${
-                        w.attend.includes("Berhalangan") ? "bg-red-400/30" : "bg-green-400/30"
-                      }`}
-                    >
-                      {w.attend}
-                    </span>
+              {seedWishes.map((w, i) => {
+                const extraBlocked = (cms as { blockedWords?: string[] }).blockedWords || [];
+                return (
+                  <div key={i} className="bg-white/10 rounded-2xl p-4 border border-white/10">
+                    <div className="flex items-center justify-between">
+                      <p className="font-medium text-gold-light text-sm">
+                        {censorProfanity(w.name, extraBlocked)}
+                      </p>
+                      <span
+                        className={`text-[10px] px-2 py-1 rounded-full ${
+                          w.attend.includes("Berhalangan") ? "bg-red-400/30" : "bg-green-400/30"
+                        }`}
+                      >
+                        {w.attend}
+                      </span>
+                    </div>
+                    <p className="text-sm text-cream/90 mt-1 leading-relaxed">
+                      {censorProfanity(w.msg, extraBlocked)}
+                    </p>
                   </div>
-                  <p className="text-sm text-cream/90 mt-1 leading-relaxed">{w.msg}</p>
-                </div>
+                );
+              })}
+            </div>
+          </div>
               ))}
             </div>
           </div>
