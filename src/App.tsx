@@ -44,7 +44,7 @@ function guestName(): string {
 }
 
 export default function App() {
-  // Ubah menjadi false jika undangan sudah siap dibuka kembali untuk tamu
+  // Ubah menjadi false saat undangan siap dibuka kembali untuk tamu
   const MAINTENANCE_MODE: boolean = true;
 
   const [opened, setOpened] = useState(false);
@@ -70,9 +70,13 @@ export default function App() {
   useReveal();
 
   useEffect(() => {
+    if (MAINTENANCE_MODE) {
+      document.body.style.overflow = "";
+      return;
+    }
     document.body.style.overflow = opened ? "" : "hidden";
     return () => { document.body.style.overflow = ""; };
-  }, [opened]);
+  }, [opened, MAINTENANCE_MODE]);
 
   useEffect(() => {
     const g = WEDDING.groom.split(" ")[0];
@@ -125,10 +129,26 @@ export default function App() {
     return `https://calendar.google.com/calendar/render?${params.toString()}`;
   }, [WEDDING.groom, WEDDING.bride, WEDDING.akad, WEDDING.resepsi, WEDDING.mapsUrl, cms.dateISO]);
 
+  if (MAINTENANCE_MODE) {
+    return (
+      <div className="min-h-screen bg-sage-900 text-cream flex items-center justify-center px-6 text-center">
+        <div className="max-w-md w-full bg-cream text-sage-900 rounded-3xl p-10 shadow-2xl">
+          <p className="tracking-[0.3em] text-xs text-sage-500 uppercase">Coming Soon</p>
+          <h1 className="font-script text-5xl text-sage-800 mt-3">
+            {WEDDING.groom.split(" ")[0]} & {WEDDING.bride.split(" ")[0]}
+          </h1>
+          <p className="text-sm text-sage-600 mt-4 leading-relaxed">
+            Undangan digital sedang dalam tahap penyempurnaan. Silakan kunjungi kembali beberapa saat lagi.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-cream text-sage-900">
       <audio ref={audioRef} loop src={cms.musicUrl} />
-      
+
       {/* COVER */}
       {!opened && (
         <div
