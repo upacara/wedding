@@ -126,6 +126,24 @@ export default function App() {
     <div className="min-h-screen bg-cream text-sage-900">
       <audio ref={audioRef} loop src={cms.musicUrl} />
 
+      export default function App() {
+  // Ubah menjadi false saat undangan sudah siap dibuka untuk tamu
+  const MAINTENANCE_MODE = true;
+
+  if (MAINTENANCE_MODE) {
+    return (
+      <div className="min-h-screen bg-sage-900 text-cream flex items-center justify-center px-6 text-center">
+        <div className="max-w-md bg-cream text-sage-900 rounded-3xl p-10 shadow-2xl">
+          <p className="tracking-[0.3em] text-xs text-sage-500 uppercase">Coming Soon</p>
+          <h1 className="font-script text-5xl text-sage-800 mt-3">Fajar & Annisa</h1>
+          <p className="text-sm text-sage-600 mt-4 leading-relaxed">
+            Undangan digital sedang dalam tahap penyempurnaan. Silakan kunjungi kembali beberapa saat lagi.
+          </p>
+        </div>
+      </div>
+    );
+  }
+      
       {/* COVER */}
       {!opened && (
         <div
