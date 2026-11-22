@@ -92,12 +92,12 @@ const CANDIDATE_CUSTOM_FRAMES: CustomPngFrame[] = [
   {
     id: "custom-jawa-floral",
     label: "Jawa & Floral (2 Pose)",
-    candidateUrls: ["/frames/frame-1.png", "/frames/frame-1.jpg"],
+    candidateUrls: ["/frames/frame-1.png", "/frames/frame-1.jpg", "/frames/frame-1.jpeg"],
     width: 1080,
     height: 1920,
     slots: [
-      { x: 85, y: 95, width: 910, height: 630 },
-      { x: 85, y: 765, width: 910, height: 630 },
+      { x: 80, y: 112, width: 920, height: 640 },
+      { x: 80, y: 790, width: 920, height: 625 },
     ],
     showGuestCredit: true,
     creditColor: "#6B5B4B",
@@ -105,12 +105,12 @@ const CANDIDATE_CUSTOM_FRAMES: CustomPngFrame[] = [
   {
     id: "custom-burgundy-lace",
     label: "Burgundy Lace (2 Pose)",
-    candidateUrls: ["/frames/frame-2.png", "/frames/frame-2.jpg"],
+    candidateUrls: ["/frames/frame-2.png", "/frames/frame-2.jpg", "/frames/frame-2.jpeg"],
     width: 1080,
     height: 1920,
     slots: [
-      { x: 115, y: 125, width: 850, height: 615 },
-      { x: 115, y: 775, width: 850, height: 615 },
+      { x: 220, y: 330, width: 640, height: 470 },
+      { x: 220, y: 945, width: 640, height: 455 },
     ],
     showGuestCredit: true,
     creditColor: "#F5EFE6",
@@ -125,10 +125,6 @@ type PolaroidCameraProps = {
   onSubmitPhoto: (file: File, name: string, caption: string) => Promise<boolean>;
 };
 
-/**
- * Mengubah area kotak putih (#FFFFFF) di dalam koordinat slot menjadi transparan,
- * sambil mempertahankan ornamen gunungan/bunga yang menimpa tepi foto tetap utuh.
- */
 function buildTransparentOverlay(img: HTMLImageElement, config: CustomPngFrame): LoadedCustomFrame {
   const canvas = document.createElement("canvas");
   canvas.width = config.width;
@@ -149,13 +145,12 @@ function buildTransparentOverlay(img: HTMLImageElement, config: CustomPngFrame):
 
       if (a === 0) continue;
 
-      // Piksel putih bersih di dalam window foto dijadikan transparan
-      if (r > 232 && g > 232 && b > 232) {
+      // Hanya piksel putih bersih (#FFFFFF) yang dilubangi, bingkai krem/renda tetap utuh
+      if (r > 245 && g > 245 && b > 245) {
         d[i + 3] = 0;
-      } else if (r > 212 && g > 212 && b > 212) {
-        // Penghalus tepi anti-aliasing di perbatasan ornamen
-        const avg = (r + g + b) / 3;
-        const factor = Math.max(0, Math.min(1, (232 - avg) / 20));
+      } else if (r > 235 && g > 235 && b > 235) {
+        const minChannel = Math.min(r, g, b);
+        const factor = Math.max(0, Math.min(1, (245 - minChannel) / 10));
         d[i + 3] = Math.round(a * factor);
       }
     }
@@ -717,7 +712,6 @@ export default function PolaroidCamera({
                     );
                   })}
 
-                  {/* Overlay yang sudah otomatis dilubangi area fotonya */}
                   <img
                     src={activeCustomEntry.processedUrl}
                     alt={activeCustomEntry.config.label}
