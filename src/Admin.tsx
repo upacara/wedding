@@ -12,9 +12,11 @@ import {
   saveConfig,
   useGuests,
   usePhotos,
+  useWishes,
 } from "./store";
 import type { WeddingConfig } from "./store";
 import { canUpload, uploadAudio, uploadPhoto } from "./uploads";
+import { censorProfanity } from "./profanityFilter";
 
 const input =
   "w-full border border-sage-200 rounded-xl px-4 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sage-400";
@@ -25,7 +27,11 @@ const tabCls = (active: boolean) =>
     active ? "bg-sage-800 text-cream" : "bg-sage-100 text-sage-700 hover:bg-sage-200"
   }`;
 
-const TABS = ["Mempelai", "Acara", "Galeri", "Story", "Tamu", "Foto Tamu", "Gift & Musik", "Backup"] as const;
+const TABS = ["Mempelai", "Acara", "Galeri", "Story", "Tamu", "Wishes", "Foto Tamu", "Gift & Musik", "Backup"] as const;
+
+type ExtendedConfig = WeddingConfig & {
+  blockedWords?: string[];
+};
 
 export function convertDriveUrl(url: string): string {
   const m = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
@@ -67,7 +73,7 @@ export default function Admin() {
   const [authed, setAuthed] = useState(isAuthed());
   const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
-  const [cfg, setCfg] = useState<WeddingConfig>(() => loadLocal());
+  const [cfg, setCfg] = useState<ExtendedConfig>(() => loadLocal() as ExtendedConfig);
   const [tab, setTab] = useState<(typeof TABS)[number]>("Mempelai");
   const [saved, setSaved] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
@@ -75,8 +81,21 @@ export default function Admin() {
   const [newPw, setNewPw] = useState("");
   const [importText, setImportText] = useState("");
   const [guestName, setGuestName] = useState("");
+
+  // State moderasi Wishes
+  const [wishSearch, setWishSearch] = useState("");
+  const [editingWishNo, setEditingWishNo] = useState<number | null>(null);
+  const [editWishDraft, setEditWishDraft] = useState({ name: "", attend: "Hadir", msg: "" });
+  const [wishBusyNo, setWishBusyNo] = useState<number | null>(null);
+  const [newBlockedWord, setNewBlockedWord] = useState("");
+
   const { guests, busy: guestsBusy, add: addGuest, remove: removeGuest } = useGuests();
   const { photos, remove: removePhoto } = usePhotos();
+  const wishesHook = useWishes() as ReturnType<typeof useWishes> & {
+    update?: (no: number, data: { name: string; attend: string; msg: string }) => Promise<boolean>;
+    remove?: (no: number) => Promise<boolean>;
+  };
+  const { wishes } = wishesHook;
 
   if (!authed) {
     return (
@@ -109,7 +128,7 @@ export default function Admin() {
     );
   }
 
-  const set = <K extends keyof WeddingConfig>(k: K, v: WeddingConfig[K]) =>
+  const set = <K extends keyof ExtendedConfig>(k: K, v: ExtendedConfig[K]) =>
     setCfg((c) => ({ ...c, [k]: v }));
 
   const save = async () => {
@@ -163,6 +182,47 @@ export default function Admin() {
       alert("JSON tidak valid.");
     }
   };
+
+  const blockedWords = cfg.blockedWords || [];
+
+  const handleAddBlockedWord = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const parts = newBlockedWord
+      .split(",")
+      .map((w) => w.trim().toLowerCase())
+      .filter(Boolean);
+    if (!parts.length) return;
+    const updated = Array.from(new Set([...blockedWords, ...parts]));
+    const nextCfg = { ...cfg, blockedWords: updated };
+    setCfg(nextCfg);
+    setNewBlockedWord("");
+    await saveConfig(nextCfg);
+  };
+
+  const handleRemoveBlockedWord = async (word: string) => {
+    const updated = blockedWords.filter((w) => w !== word);
+    const nextCfg = { ...cfg, blockedWords: updated };
+    setCfg(nextCfg);
+    await saveConfig(nextCfg);
+  };
+
+  const callSheetsPost = async (payload: Record<string, unknown>) => {
+    const apiUrl = import.meta.env.VITE_SHEETS_API_URL;
+    const token = import.meta.env.VITE_SHEETS_TOKEN;
+    if (!apiUrl || !token) return false;
+    const res = await fetch(apiUrl, {
+      method: "POST",
+      body: JSON.stringify({ ...payload, token }),
+    });
+    const data = await res.json();
+    return Boolean(data.ok);
+  };
+
+  const filteredWishes = wishes.filter((w) => {
+    const q = wishSearch.trim().toLowerCase();
+    if (!q) return true;
+    return w.name.toLowerCase().includes(q) || w.msg.toLowerCase().includes(q);
+  });
 
   return (
     <div className="min-h-screen bg-cream">
@@ -344,11 +404,6 @@ export default function Admin() {
                 {uploading === "gallery-new" ? "Mengupload..." : "⬆ Upload foto"}
               </button>
             </div>
-            {!canUpload && (
-              <p className="text-xs text-amber-700">
-                Upload butuh Cloudinary di .env (gratis). Sementara pakai URL / Google Drive.
-              </p>
-            )}
           </div>
         )}
 
@@ -436,7 +491,7 @@ export default function Admin() {
                 </form>
                 <p className="text-xs text-sage-500">
                   Klik <b>WA</b> untuk mengirim teks undangan lengkap beserta link personal tamu, atau{" "}
-                  <b>Salin Pesan</b> untuk menempelkannya secara manual.
+                  <b>📋 Pesan</b> untuk menyalinnya secara manual.
                 </p>
                 <div className="bg-white rounded-2xl border overflow-hidden">
                   <div className="grid grid-cols-[3rem_1fr_auto] gap-2 px-4 py-2 bg-sage-50 text-xs font-semibold text-sage-600 uppercase">
@@ -455,7 +510,6 @@ export default function Admin() {
                             alert("Link tersalin:\n" + guestLink(g.name));
                           }}
                           className="text-xs bg-sage-100 hover:bg-sage-200 rounded-lg px-2.5 py-1.5"
-                          title="Salin link personal saja"
                         >
                           ⧉ Link
                         </button>
@@ -465,7 +519,6 @@ export default function Admin() {
                             alert(`Teks undangan lengkap untuk "${g.name}" berhasil disalin!`);
                           }}
                           className="text-xs bg-sage-100 hover:bg-sage-200 rounded-lg px-2.5 py-1.5"
-                          title="Salin seluruh teks undangan"
                         >
                           📋 Pesan
                         </button>
@@ -492,9 +545,220 @@ export default function Admin() {
                     <p className="px-4 py-6 text-sm text-sage-400 text-center">Belum ada tamu. Tambahkan di atas.</p>
                   )}
                 </div>
-                <p className="text-xs text-sage-500">
-                  Total: {guests.length} tamu • tersimpan di tab "Guests" pada spreadsheet.
-                </p>
+              </>
+            )}
+          </div>
+        )}
+
+        {tab === "Wishes" && (
+          <div className="space-y-5 max-w-3xl">
+            {!isSheetsConfigured ? (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-sm text-amber-900">
+                Moderasi ucapan membutuhkan backend Google Sheets. Pastikan <code>VITE_SHEETS_API_URL</code> dan{" "}
+                <code>VITE_SHEETS_TOKEN</code> terisi di <code>.env</code>.
+              </div>
+            ) : (
+              <>
+                {/* Pengaturan Filter Kata Tidak Pantas */}
+                <div className="bg-white rounded-2xl border border-sage-100 p-5 space-y-3">
+                  <div>
+                    <p className={label}>Aturan Sensor Otomatis Kata Tidak Pantas</p>
+                    <p className="text-xs text-sage-500 mt-1">
+                      Kata kasar umum (Indonesia & Inggris) sudah otomatis disensor menjadi bintang (<code>a****g</code>
+                      ). Tambahkan kata khusus lain di bawah ini jika diperlukan (pisahkan dengan koma).
+                    </p>
+                  </div>
+                  <form onSubmit={handleAddBlockedWord} className="flex gap-2">
+                    <input
+                      value={newBlockedWord}
+                      onChange={(e) => setNewBlockedWord(e.target.value)}
+                      placeholder="Contoh: kata1, kata2, kata3"
+                      className={input}
+                    />
+                    <button
+                      type="submit"
+                      className={`${btn} bg-sage-700 text-cream hover:bg-sage-800 whitespace-nowrap`}
+                    >
+                      ＋ Tambah Kata
+                    </button>
+                  </form>
+                  {blockedWords.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {blockedWords.map((word) => (
+                        <span
+                          key={word}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sage-100 text-sage-800 text-xs"
+                        >
+                          {word}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveBlockedWord(word)}
+                            className="text-red-500 hover:text-red-700 font-bold"
+                            title="Hapus kata dari daftar sensor"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Daftar Ucapan Tamu */}
+                <div className="bg-white rounded-2xl border border-sage-100 p-5 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <p className={label}>Daftar Ucapan & RSVP ({wishes.length})</p>
+                    <input
+                      value={wishSearch}
+                      onChange={(e) => setWishSearch(e.target.value)}
+                      placeholder="Cari nama atau isi ucapan..."
+                      className="border border-sage-200 rounded-xl px-3.5 py-2 text-xs bg-cream focus:outline-none focus:ring-2 focus:ring-sage-400 sm:w-64"
+                    />
+                  </div>
+
+                  <div className="space-y-3">
+                    {filteredWishes.map((w, idx) => {
+                      const rowNo = (w as { no?: number }).no;
+                      const isEditing = rowNo !== undefined && editingWishNo === rowNo;
+                      const isBusy = rowNo !== undefined && wishBusyNo === rowNo;
+
+                      return (
+                        <div key={rowNo ?? idx} className="border border-sage-200 rounded-2xl p-4 bg-sage-50/60">
+                          {isEditing ? (
+                            <div className="space-y-3">
+                              <div className="grid sm:grid-cols-2 gap-2">
+                                <input
+                                  value={editWishDraft.name}
+                                  onChange={(e) => setEditWishDraft({ ...editWishDraft, name: e.target.value })}
+                                  placeholder="Nama Tamu"
+                                  className={input}
+                                />
+                                <select
+                                  value={editWishDraft.attend}
+                                  onChange={(e) => setEditWishDraft({ ...editWishDraft, attend: e.target.value })}
+                                  className={input}
+                                >
+                                  <option>Hadir</option>
+                                  <option>Insya Allah Hadir</option>
+                                  <option>Berhalangan</option>
+                                </select>
+                              </div>
+                              <textarea
+                                rows={3}
+                                value={editWishDraft.msg}
+                                onChange={(e) => setEditWishDraft({ ...editWishDraft, msg: e.target.value })}
+                                className={input}
+                              />
+                              <div className="flex flex-wrap gap-2 justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setEditWishDraft({
+                                      ...editWishDraft,
+                                      name: censorProfanity(editWishDraft.name, blockedWords),
+                                      msg: censorProfanity(editWishDraft.msg, blockedWords),
+                                    })
+                                  }
+                                  className="text-xs px-3 py-2 rounded-xl bg-amber-100 text-amber-900 hover:bg-amber-200 font-medium"
+                                >
+                                  ✨ Terapkan Sensor Otomatis
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingWishNo(null)}
+                                  className="text-xs px-3 py-2 rounded-xl bg-sage-100 text-sage-700 hover:bg-sage-200"
+                                >
+                                  Batal
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isBusy}
+                                  onClick={async () => {
+                                    if (rowNo === undefined) return;
+                                    setWishBusyNo(rowNo);
+                                    try {
+                                      const ok = wishesHook.update
+                                        ? await wishesHook.update(rowNo, editWishDraft)
+                                        : await callSheetsPost({
+                                            action: "updateWish",
+                                            no: rowNo,
+                                            name: editWishDraft.name,
+                                            attend: editWishDraft.attend,
+                                            msg: editWishDraft.msg,
+                                          });
+                                      if (ok) {
+                                        setEditingWishNo(null);
+                                        if (!wishesHook.update) window.location.reload();
+                                      } else {
+                                        alert("Gagal memperbarui ucapan. Pastikan Kode.gs sudah di-deploy New version.");
+                                      }
+                                    } finally {
+                                      setWishBusyNo(null);
+                                    }
+                                  }}
+                                  className="text-xs px-4 py-2 rounded-xl bg-sage-800 text-cream hover:bg-sage-900 font-medium disabled:opacity-50"
+                                >
+                                  {isBusy ? "Menyimpan..." : "Simpan Perubahan"}
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-semibold text-sm text-sage-900">{w.name}</span>
+                                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-sage-200 text-sage-800">
+                                    {w.attend}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-sage-700 leading-relaxed whitespace-pre-line">{w.msg}</p>
+                              </div>
+
+                              <div className="flex gap-1.5 shrink-0">
+                                <button
+                                  type="button"
+                                  disabled={rowNo === undefined}
+                                  onClick={() => {
+                                    if (rowNo === undefined) return;
+                                    setEditingWishNo(rowNo);
+                                    setEditWishDraft({ name: w.name, attend: w.attend, msg: w.msg });
+                                  }}
+                                  className="text-xs px-3 py-1.5 rounded-xl bg-sage-100 text-sage-800 hover:bg-sage-200 font-medium"
+                                >
+                                  ✏️ Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isBusy || rowNo === undefined}
+                                  onClick={async () => {
+                                    if (rowNo === undefined) return;
+                                    if (!confirm(`Hapus ucapan dari "${w.name}"?`)) return;
+                                    setWishBusyNo(rowNo);
+                                    try {
+                                      const ok = wishesHook.remove
+                                        ? await wishesHook.remove(rowNo)
+                                        : await callSheetsPost({ action: "deleteWish", no: rowNo });
+                                      if (ok && !wishesHook.remove) window.location.reload();
+                                    } finally {
+                                      setWishBusyNo(null);
+                                    }
+                                  }}
+                                  className="text-xs px-3 py-1.5 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 font-medium"
+                                >
+                                  🗑 Hapus
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {!filteredWishes.length && (
+                      <p className="text-sm text-sage-400 text-center py-8">Tidak ada ucapan yang sesuai.</p>
+                    )}
+                  </div>
+                </div>
               </>
             )}
           </div>
@@ -531,7 +795,7 @@ export default function Admin() {
                               src={p.url}
                               alt={p.caption || p.name}
                               loading="lazy"
-                              className="w-full aspect-square object-cover hover:scale-105 transition duration-200"
+                              className="w-full aspect-[3/4] object-contain hover:scale-105 transition duration-200"
                             />
                           </a>
                           <div className="p-3 flex-1 flex flex-col justify-between gap-2">
@@ -539,16 +803,6 @@ export default function Admin() {
                               <p className="text-xs font-semibold text-sage-800 truncate">{p.name}</p>
                               {p.caption && (
                                 <p className="text-[11px] text-sage-600 line-clamp-2 mt-0.5">{p.caption}</p>
-                              )}
-                              {p.at > 0 && (
-                                <p className="text-[10px] text-sage-400 mt-1">
-                                  {new Date(p.at).toLocaleString("id-ID", {
-                                    day: "2-digit",
-                                    month: "short",
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  })}
-                                </p>
                               )}
                             </div>
                             <button
@@ -711,7 +965,7 @@ export default function Admin() {
                   onClick={async () => {
                     if (confirm("Reset ke bawaan (data.ts)?")) {
                       await resetConfig();
-                      setCfg(loadLocal());
+                      setCfg(loadLocal() as ExtendedConfig);
                     }
                   }}
                   className={`${btn} bg-red-50 text-red-600 hover:bg-red-100`}
@@ -755,11 +1009,6 @@ export default function Admin() {
                   Ganti
                 </button>
               </div>
-            </div>
-            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-sm text-amber-900">
-              <b>Catatan:</b> jika <code>VITE_SHEETS_API_URL</code> terisi, tombol Simpan otomatis menulis ke Google
-              Sheets sehingga semua tamu melihat perubahan. Tanpa itu, data hanya tersimpan di browser ini — gunakan
-              Download JSON lalu paste ke <code>src/data.ts</code>.
             </div>
           </div>
         )}
