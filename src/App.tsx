@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCmsConfig, useWishes, usePhotos } from "./store";
+import PolaroidCamera from "./PolaroidCamera";
 
 function parseWibDate(iso: string): Date {
   const clean = (iso || "").trim();
