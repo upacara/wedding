@@ -96,8 +96,8 @@ const CANDIDATE_CUSTOM_FRAMES: CustomPngFrame[] = [
     width: 1080,
     height: 1920,
     slots: [
-      { x: 80, y: 112, width: 920, height: 640 },
-      { x: 80, y: 790, width: 920, height: 625 },
+      { x: 78, y: 108, width: 924, height: 642 },
+      { x: 78, y: 786, width: 924, height: 634 },
     ],
     showGuestCredit: true,
     creditColor: "#6B5B4B",
@@ -109,8 +109,8 @@ const CANDIDATE_CUSTOM_FRAMES: CustomPngFrame[] = [
     width: 1080,
     height: 1920,
     slots: [
-      { x: 220, y: 330, width: 640, height: 470 },
-      { x: 220, y: 945, width: 640, height: 455 },
+      { x: 215, y: 325, width: 650, height: 475 },
+      { x: 215, y: 940, width: 650, height: 465 },
     ],
     showGuestCredit: true,
     creditColor: "#F5EFE6",
@@ -145,7 +145,6 @@ function buildTransparentOverlay(img: HTMLImageElement, config: CustomPngFrame):
 
       if (a === 0) continue;
 
-      // Hanya piksel putih bersih (#FFFFFF) yang dilubangi, bingkai krem/renda tetap utuh
       if (r > 245 && g > 245 && b > 245) {
         d[i + 3] = 0;
       } else if (r > 235 && g > 235 && b > 235) {
@@ -326,6 +325,9 @@ export default function PolaroidCamera({
   onSubmitPhoto,
 }: PolaroidCameraProps) {
   const [mode, setMode] = useState<"camera" | "gallery">("camera");
+  // Kamera tidak langsung menyala saat website dibuka; baru menyala saat tamu menekan tombol
+  const [cameraActive, setCameraActive] = useState(false);
+
   const [customFrames, setCustomFrames] = useState<LoadedCustomFrame[]>([]);
   const [selectedFrameId, setSelectedFrameId] = useState<string>("cream-gold");
 
@@ -378,11 +380,15 @@ export default function PolaroidCamera({
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
     setCameraReady(false);
   };
 
+  // Jalankan kamera HANYA ketika mode === "camera", cameraActive === true, dan pose belum lengkap
   useEffect(() => {
-    if (mode !== "camera" || isComplete) {
+    if (mode !== "camera" || !cameraActive || isComplete) {
       stopStream();
       return;
     }
@@ -416,6 +422,7 @@ export default function PolaroidCamera({
         }
       } catch {
         if (!cancelled) {
+          setCameraActive(false);
           setCameraError(
             "Kamera tidak dapat diakses (izin ditolak atau perangkat tidak memiliki kamera). Gunakan mode Pilih dari Galeri."
           );
@@ -427,7 +434,7 @@ export default function PolaroidCamera({
       cancelled = true;
       stopStream();
     };
-  }, [mode, facingMode, isComplete]);
+  }, [mode, cameraActive, facingMode, isComplete]);
 
   useEffect(() => {
     if (!isComplete || shots.length === 0) {
@@ -540,8 +547,13 @@ export default function PolaroidCamera({
     if (ok) {
       resetShots();
       setCaption("");
+      setCameraActive(false);
     }
   };
+
+  // Slot aktif saat ini untuk posisi <video> tunggal di Custom Overlay
+  const currentSlotIndex = Math.min(shots.length, Math.max(0, requiredShots - 1));
+  const activeSlot = activeCustomEntry ? activeCustomEntry.config.slots[currentSlotIndex] : null;
 
   return (
     <div className="bg-white/90 backdrop-blur rounded-3xl border border-sage-200/80 p-5 md:p-6 shadow-sm space-y-5">
@@ -563,6 +575,7 @@ export default function PolaroidCamera({
           type="button"
           onClick={() => {
             resetShots();
+            setCameraActive(false);
             setMode("gallery");
           }}
           className={`flex-1 py-2.5 text-xs sm:text-sm font-medium rounded-xl transition ${
@@ -633,7 +646,10 @@ export default function PolaroidCamera({
             />
             <button
               type="button"
-              onClick={resetShots}
+              onClick={() => {
+                resetShots();
+                if (mode === "camera") setCameraActive(true);
+              }}
               className="w-full py-2 text-xs font-medium rounded-xl bg-sage-100 text-sage-800 hover:bg-sage-200 transition"
             >
               ↺ {mode === "camera" ? "Foto Ulang" : "Ganti Foto"}
@@ -643,79 +659,187 @@ export default function PolaroidCamera({
           cameraError ? (
             <div className="w-full rounded-2xl bg-amber-50 border border-amber-200 p-5 text-center space-y-3">
               <p className="text-xs text-amber-900">{cameraError}</p>
-              <button
-                type="button"
-                onClick={() => setMode("gallery")}
-                className="px-4 py-2 rounded-xl bg-sage-800 text-cream text-xs font-medium"
-              >
-                Buka Galeri Foto
-              </button>
+              <div className="flex justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCameraError(null);
+                    setCameraActive(true);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-sage-100 text-sage-800 text-xs font-medium"
+                >
+                  Coba Kamera Lagi
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode("gallery")}
+                  className="px-4 py-2 rounded-xl bg-sage-800 text-cream text-xs font-medium"
+                >
+                  Buka Galeri Foto
+                </button>
+              </div>
             </div>
-          ) : (
+          ) : !cameraActive ? (
+            /* TAMPILAN STANDBY SEBELUM KAMERA DIAKTIFKAN (TIDAK MEMINTA IZIN BROWSER DULU) */
             <div className="w-full max-w-xs space-y-3">
               {activeCustomEntry ? (
                 <div
                   style={{
                     aspectRatio: `${activeCustomEntry.config.width} / ${activeCustomEntry.config.height}`,
                   }}
+                  className="relative w-full rounded-2xl overflow-hidden shadow-lg border border-sage-200 bg-sage-900"
+                >
+                  <img
+                    src={activeCustomEntry.processedUrl}
+                    alt={activeCustomEntry.config.label}
+                    className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none"
+                  />
+                  <div className="absolute inset-x-0 top-[24%] flex flex-col items-center justify-center px-6 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setCameraActive(true)}
+                      className="px-5 py-3 rounded-full bg-sage-800 text-cream text-xs font-semibold shadow-xl hover:bg-sage-900 transition"
+                    >
+                      📷 Aktifkan Kamera
+                    </button>
+                    <p className="text-[11px] text-white/90 bg-black/50 px-3 py-1 rounded-full mt-2">
+                      {requiredShots} Pose Otomatis
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  style={{
+                    backgroundColor: activeBuiltin.id === "none" ? "#1C1C1E" : activeBuiltin.bg,
+                    borderColor: activeBuiltin.border ?? "transparent",
+                  }}
+                  className={`relative rounded-2xl shadow-lg border transition-colors ${
+                    activeBuiltin.id === "none" ? "p-0 overflow-hidden" : "p-3.5 pb-5"
+                  }`}
+                >
+                  <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-sage-900 flex flex-col items-center justify-center p-4 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setCameraActive(true)}
+                      className="px-5 py-3 rounded-full bg-cream text-sage-900 text-xs font-semibold shadow-lg hover:bg-white transition"
+                    >
+                      📷 Aktifkan Kamera
+                    </button>
+                    <p className="text-[11px] text-cream/75 mt-2.5">
+                      Klik tombol di atas untuk mulai memotret
+                    </p>
+                  </div>
+
+                  {activeBuiltin.id !== "none" && (
+                    <div className="pt-3 text-center select-none">
+                      <p
+                        style={{ color: activeBuiltin.textPrimary }}
+                        className="font-serif2 italic text-xs truncate"
+                      >
+                        {caption.trim() ? `"${caption.trim()}"` : "Happily Ever After"}
+                      </p>
+                      <p
+                        style={{ color: activeBuiltin.textSecondary }}
+                        className="text-[10px] font-semibold tracking-wider mt-0.5"
+                      >
+                        {coupleTitle} • {dateLabel}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            /* KAMERA AKTIF */
+            <div className="w-full max-w-xs space-y-3">
+              {activeCustomEntry && activeSlot ? (
+                <div
+                  style={{
+                    aspectRatio: `${activeCustomEntry.config.width} / ${activeCustomEntry.config.height}`,
+                  }}
                   className="relative w-full rounded-2xl overflow-hidden shadow-lg border border-sage-200 bg-[#FAF7F2]"
                 >
+                  {/* Hasil jepretan pose yang sudah diambil */}
                   {activeCustomEntry.config.slots.map((slot, idx) => {
                     const leftPct = (slot.x / activeCustomEntry.config.width) * 100;
                     const topPct = (slot.y / activeCustomEntry.config.height) * 100;
                     const widthPct = (slot.width / activeCustomEntry.config.width) * 100;
                     const heightPct = (slot.height / activeCustomEntry.config.height) * 100;
-                    const isCurrentSlot = idx === shots.length;
 
-                    return (
-                      <div
-                        key={idx}
-                        style={{
-                          left: `${leftPct}%`,
-                          top: `${topPct}%`,
-                          width: `${widthPct}%`,
-                          height: `${heightPct}%`,
-                        }}
-                        className="absolute overflow-hidden bg-neutral-900"
-                      >
-                        {shotPreviews[idx] ? (
+                    if (shotPreviews[idx]) {
+                      return (
+                        <div
+                          key={idx}
+                          style={{
+                            left: `${leftPct}%`,
+                            top: `${topPct}%`,
+                            width: `${widthPct}%`,
+                            height: `${heightPct}%`,
+                          }}
+                          className="absolute overflow-hidden bg-neutral-900"
+                        >
                           <img
                             src={shotPreviews[idx]}
                             alt={`Pose ${idx + 1}`}
                             className="w-full h-full object-cover"
                           />
-                        ) : isCurrentSlot ? (
-                          <>
-                            <video
-                              ref={videoRef}
-                              playsInline
-                              muted
-                              className={`w-full h-full object-cover ${facingMode === "user" ? "scale-x-[-1]" : ""}`}
-                            />
-                            {!cameraReady && (
-                              <div className="absolute inset-0 flex items-center justify-center text-xs text-white/80 bg-black/60">
-                                Menyiapkan kamera...
-                              </div>
-                            )}
-                            {countdown !== null && (
-                              <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                                <span className="text-5xl font-bold text-white drop-shadow">{countdown}</span>
-                              </div>
-                            )}
-                          </>
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-xs text-white/60">
-                            Pose {idx + 1}
-                          </div>
-                        )}
-                      </div>
-                    );
+                        </div>
+                      );
+                    }
+
+                    if (idx > shots.length) {
+                      return (
+                        <div
+                          key={idx}
+                          style={{
+                            left: `${leftPct}%`,
+                            top: `${topPct}%`,
+                            width: `${widthPct}%`,
+                            height: `${heightPct}%`,
+                          }}
+                          className="absolute overflow-hidden bg-neutral-900 flex items-center justify-center text-xs text-white/60"
+                        >
+                          Pose {idx + 1}
+                        </div>
+                      );
+                    }
+
+                    return null;
                   })}
 
+                  {/* SATU elemen <video> persisten yang bergeser mulus dari Pose 1 ke Pose 2 */}
+                  <div
+                    style={{
+                      left: `${(activeSlot.x / activeCustomEntry.config.width) * 100}%`,
+                      top: `${(activeSlot.y / activeCustomEntry.config.height) * 100}%`,
+                      width: `${(activeSlot.width / activeCustomEntry.config.width) * 100}%`,
+                      height: `${(activeSlot.height / activeCustomEntry.config.height) * 100}%`,
+                    }}
+                    className="absolute overflow-hidden bg-neutral-900"
+                  >
+                    <video
+                      ref={videoRef}
+                      playsInline
+                      muted
+                      className={`w-full h-full object-cover ${facingMode === "user" ? "scale-x-[-1]" : ""}`}
+                    />
+                    {!cameraReady && (
+                      <div className="absolute inset-0 flex items-center justify-center text-xs text-white/80 bg-black/60">
+                        Menyiapkan kamera...
+                      </div>
+                    )}
+                    {countdown !== null && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                        <span className="text-5xl font-bold text-white drop-shadow">{countdown}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Overlay frame di lapisan paling atas */}
                   <img
                     src={activeCustomEntry.processedUrl}
                     alt={activeCustomEntry.config.label}
-                    className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none"
+                    className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none z-10"
                   />
                 </div>
               ) : (
@@ -767,20 +891,20 @@ export default function PolaroidCamera({
               )}
 
               {/* Tombol Kontrol Shutter */}
-              <div className="flex items-center justify-center gap-2">
+              <div className="flex items-center justify-center gap-1.5">
                 {shots.length > 0 ? (
                   <button
                     type="button"
                     onClick={undoLastShot}
-                    className="px-3 py-2.5 rounded-xl bg-amber-100 text-amber-900 hover:bg-amber-200 text-xs font-medium"
+                    className="px-2.5 py-2.5 rounded-xl bg-amber-100 text-amber-900 hover:bg-amber-200 text-xs font-medium"
                   >
-                    ↺ Ulang Pose {shots.length}
+                    ↺ Pose {shots.length}
                   </button>
                 ) : (
                   <button
                     type="button"
                     onClick={() => setFacingMode((m) => (m === "user" ? "environment" : "user"))}
-                    className="px-3 py-2.5 rounded-xl bg-sage-100 text-sage-800 hover:bg-sage-200 text-xs font-medium"
+                    className="px-2.5 py-2.5 rounded-xl bg-sage-100 text-sage-800 hover:bg-sage-200 text-xs font-medium"
                     title="Ganti Kamera Depan / Belakang"
                   >
                     🔄 Balik
@@ -791,19 +915,31 @@ export default function PolaroidCamera({
                   type="button"
                   disabled={!cameraReady || countdown !== null}
                   onClick={() => triggerShutter(false)}
-                  className="flex-1 py-2.5 rounded-xl bg-sage-800 text-cream hover:bg-sage-900 text-sm font-semibold shadow disabled:opacity-50"
+                  className="flex-1 py-2.5 rounded-xl bg-sage-800 text-cream hover:bg-sage-900 text-xs sm:text-sm font-semibold shadow disabled:opacity-50"
                 >
-                  📸 Jepret{requiredShots > 1 ? ` Pose ${shots.length + 1}/${requiredShots}` : ""}
+                  📸 Jepret{requiredShots > 1 ? ` ${shots.length + 1}/${requiredShots}` : ""}
                 </button>
 
                 <button
                   type="button"
                   disabled={!cameraReady || countdown !== null}
                   onClick={() => triggerShutter(true)}
-                  className="px-3 py-2.5 rounded-xl bg-sage-100 text-sage-800 hover:bg-sage-200 text-xs font-medium disabled:opacity-50"
+                  className="px-2.5 py-2.5 rounded-xl bg-sage-100 text-sage-800 hover:bg-sage-200 text-xs font-medium disabled:opacity-50"
                   title="Timer 3 Detik"
                 >
                   ⏱ 3d
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetShots();
+                    setCameraActive(false);
+                  }}
+                  className="px-2.5 py-2.5 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 text-xs font-medium"
+                  title="Matikan Kamera"
+                >
+                  ✕
                 </button>
               </div>
             </div>
